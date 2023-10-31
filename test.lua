@@ -11,6 +11,7 @@ local z = symdiff.var "z"
 local t = symdiff.var "t"
 local expr = z^z - t*z + 1
 print(expr.derivative[z])
+print((symdiff.sin(1).derivative[z]))
 -- print(expr:evaluate {[z] = 2, [t] = -1})
 -- print(expr:evaluate {[z] = 2})
 -- print(expr.derivative[t]:evaluate {[z] = 0})

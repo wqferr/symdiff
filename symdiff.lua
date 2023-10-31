@@ -76,6 +76,8 @@ local nodeTypes = {
     const = "constant",
     var = "variable",
     sum = "sum",
+    diff = "difference",
+    unm = "negation",
     mul = "product",
     div = "division",
     pow = "power",
@@ -86,11 +88,11 @@ setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..to
 local priorities = {
     [nodeTypes.const] = 10,
     [nodeTypes.var] = 10,
-    -- [nodeTypes.unm] = 9
+    [nodeTypes.unm] = 9,
     [nodeTypes.pow] = 8,
     [nodeTypes.mul] = 2,
     [nodeTypes.div] = 2,
-    -- [nodeTypes.sub] = 2,
+    [nodeTypes.diff] = 1,
     [nodeTypes.sum] = 1,
 }
 local function priority(expression)
@@ -218,6 +220,19 @@ local function isConstant(expr)
     return expr.nodeType == nodeTypes.const
 end
 
+local function wrapParentsIfNeeded(expr, parents)
+    local results = {}
+    local ps = priority(expr)
+    for _, p in ipairs(parents) do
+        local s = tostring(p)
+        if priority(p) < ps then
+            s = "("..s..")"
+        end
+        table.insert(results, s)
+    end
+    return unpack(results)
+end
+
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
 end
@@ -253,25 +268,58 @@ Expression__meta.__add = function(a, b)
     local sum = createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
     return sum
 end
-Expression__meta.__sub = function(a, b)
-    return a + -b
-end
 
-Expression__meta.__unm = function(a)
-    return -1 * a
+local function diffEval(self, point)
+    return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
 end
-
-local function wrapParentsIfNeeded(expr, parents)
-    local results = {}
-    local ps = priority(expr)
-    for _, p in ipairs(parents) do
-        local s = tostring(p)
-        if priority(p) < ps then
-            s = "("..s..")"
-        end
-        table.insert(results, s)
+local function diffDerivative(self, withRespectTo)
+    if not self.dependencies[withRespectTo] then
+        return zero
     end
-    return unpack(results)
+    return self.parents[1].derivative[withRespectTo] +
+        self.parents[2].derivative[withRespectTo]
+end
+local function diffFormat(self)
+    return ("%s - %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
+end
+Expression__meta.__sub = function(a, b)
+    if type(a) == "number" then
+        a = M.const(a)
+    end
+    if type(b) == "number" then
+        b = M.const(b)
+    end
+    if isConstant(a) then
+        if a:evaluate(nullPoint) == 0 then
+            return -b
+        elseif isConstant(b) then
+            return M.const(a:evaluate(nullPoint) - b:evaluate(nullPoint))
+        end
+    elseif isConstant(b) and b:evaluate(nullPoint) == 0 then
+        return a
+    end
+    local diff = createBaseExpression(nodeTypes.diff, diffEval, diffDerivative, diffFormat, {a, b})
+    return diff
+end
+
+local function unmEval(self, point)
+    return -self.parents[1]:evaluate(point)
+end
+local function unmDerivative(self, withRespectTo)
+    if not self.dependencies[withRespectTo] then
+        return zero
+    end
+    return -self.parents[1].derivative[withRespectTo]
+end
+local function unmFormat(self)
+    local p1 = wrapParentsIfNeeded(self, self.parents)
+    return ("-%s"):format(tostring(p1))
+end
+Expression__meta.__unm = function(a)
+    if type(a) == "number" then
+        return M.const(-a)
+    end
+    return -1 * a
 end
 
 local function productEval(self, point)
@@ -322,6 +370,8 @@ Expression__meta.__mul = function(a, b)
         else
             return constProduct(a, b)
         end
+    elseif isConstant(b) and b:evaluate(nullPoint) == 1 then
+        return a
     end
     local product = createBaseExpression(nodeTypes.mul, productEval, productDerivative, productFormat, {a, b})
     return product
