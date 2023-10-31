@@ -9,11 +9,12 @@ end
 
 local z = symdiff.var "z"
 local t = symdiff.var "t"
-local expr = z^2 - t + 1
-print(expr:evaluate {[z] = 2, [t] = -1})
-print(expr:evaluate {[z] = 2})
-print(expr.derivative[t]:evaluate {[z] = 0})
+local expr = z^z - t*z + 1
 print(expr.derivative[z])
+-- print(expr:evaluate {[z] = 2, [t] = -1})
+-- print(expr:evaluate {[z] = 2})
+-- print(expr.derivative[t]:evaluate {[z] = 0})
+-- print(expr.derivative[z])
 
 -- printDeps(2*z)
 -- printDeps(expr)

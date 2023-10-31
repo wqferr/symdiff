@@ -1,6 +1,7 @@
 --[[
     TODO
     merge consecutive sum / product nodes
+    add proper subtraction and unm nodes
     fix dependency tracking when taking derivatives
 ]]
 --[[
@@ -25,23 +26,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
--- LIMITATIONS:
--- only deals with single-variable expressions
+---@diagnostic disable-next-line: deprecated
+local unpack = unpack or table.unpack
 
 local M = {}
 
 --@field derivative Expression|fun(self: table, point: number): number
 --@field cachedDerivatives {Variable: Expression}
+--@field isConstant boolean?
 
 ---@class Variable: Expression
 
 ---@class Expression
 ---@field name string?
+---@field nodeType string
 ---@field eval fun(self: Expression, point: {Variable: number}): number|Expression
 ---@field format fun(self): string
 ---@field dependencies {Variable: boolean}
 ---@field calculateDerivative fun(self: Expression, variable: Variable)
----@field isConstant boolean?
 ---@field parents Expression[]
 ---@field derivative DerivativeAccessor
 ---@field func fun(arg: number): number
@@ -69,6 +71,31 @@ DerivativeAccessor__meta.__index = function(t, k)
     return t[k]
 end
 -- TODO __call when dependencies has only one element
+
+local nodeTypes = {
+    const = "constant",
+    var = "variable",
+    sum = "sum",
+    mul = "product",
+    div = "division",
+    pow = "power",
+    func = "function"
+}
+setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..tostring(k)) end})
+
+local priorities = {
+    [nodeTypes.const] = 10,
+    [nodeTypes.var] = 10,
+    -- [nodeTypes.unm] = 9
+    [nodeTypes.pow] = 8,
+    [nodeTypes.mul] = 2,
+    [nodeTypes.div] = 2,
+    -- [nodeTypes.sub] = 2,
+    [nodeTypes.sum] = 1,
+}
+local function priority(expression)
+    return priorities[expression.nodeType]
+end
 
 local function createDerivativeAccessor(expression)
     local accessor = setmetatable({}, DerivativeAccessor__meta)
@@ -99,8 +126,9 @@ end
 -- Used for evaluating constants
 local nullPoint = {}
 ---@nodiscard
-local function baseExpression(eval, derivative, format, parents)
+local function createBaseExpression(nodeType, eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
+    expr.nodeType = nodeType
     expr.eval = eval
     expr.calculateDerivative = derivative
     expr.format = format
@@ -148,7 +176,7 @@ end
 function M.var(name)
     ---@type Variable
     ---@diagnostic disable-next-line: assign-type-mismatch
-    local v = baseExpression(varEval, varDerivative, varFormat)
+    local v = createBaseExpression(nodeTypes.var, varEval, varDerivative, varFormat)
     addDependency(v, v)
     v.name = name
 
@@ -179,13 +207,16 @@ local function constFormat(self)
 end
 
 function M.const(value, name)
-    local c = baseExpression(createConstEval(value), constDerivative, constFormat)
+    local c = createBaseExpression(nodeTypes.const, createConstEval(value), constDerivative, constFormat)
     c.name = name
-    c.isConstant = true
     return c
 end
 zero = M.const(0)
 M.zero = zero
+
+local function isConstant(expr)
+    return expr.nodeType == nodeTypes.const
+end
 
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
@@ -198,7 +229,7 @@ local function sumDerivative(self, withRespectTo)
         self.parents[2].derivative[withRespectTo]
 end
 local function sumFormat(self)
-    return ("(%s + %s)"):format(tostring(self.parents[1]), tostring(self.parents[2]))
+    return ("%s + %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
 ---@param a Expression|number
 ---@param b Expression|number
@@ -210,16 +241,16 @@ Expression__meta.__add = function(a, b)
     if type(b) == "number" then
         b = M.const(b)
     end
-    if a.isConstant then
+    if isConstant(a) then
         if a:evaluate(nullPoint) == 0 then
             return b
-        elseif b.isConstant then
+        elseif isConstant(b) then
             return M.const(a:evaluate(nullPoint) + b:evaluate(nullPoint))
         end
-    elseif b.isConstant and b:evaluate(nullPoint) == 0 then
+    elseif isConstant(b) and b:evaluate(nullPoint) == 0 then
         return a
     end
-    local sum = baseExpression(sumEval, sumDerivative, sumFormat, {a, b})
+    local sum = createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
     return sum
 end
 Expression__meta.__sub = function(a, b)
@@ -228,6 +259,19 @@ end
 
 Expression__meta.__unm = function(a)
     return -1 * a
+end
+
+local function wrapParentsIfNeeded(expr, parents)
+    local results = {}
+    local ps = priority(expr)
+    for _, p in ipairs(parents) do
+        local s = tostring(p)
+        if priority(p) < ps then
+            s = "("..s..")"
+        end
+        table.insert(results, s)
+    end
+    return unpack(results)
 end
 
 local function productEval(self, point)
@@ -248,11 +292,12 @@ local function productDerivative(self, withRespectTo)
     return p1*p2.derivative[withRespectTo] + p1.derivative[withRespectTo]*p2
 end
 local function productFormat(self)
-    return ("(%s * %s)"):format(tostring(self.parents[1]), tostring(self.parents[2]))
+    local p1, p2 = wrapParentsIfNeeded(self, self.parents)
+    return ("%s * %s"):format(p1, p2)
 end
 local function constProduct(const, expr)
-    assert(const.isConstant, "First argument to constProduct must be a Constant")
-    local product = baseExpression(productEval, constProductDerivative, productFormat, {const, expr})
+    assert(isConstant(const), "First argument to constProduct must be a Constant")
+    local product = createBaseExpression(nodeTypes.mul, productEval, constProductDerivative, productFormat, {const, expr})
     return product
 end
 
@@ -263,10 +308,10 @@ Expression__meta.__mul = function(a, b)
     if type(a) == "number" then
         a = M.const(a)
     end
-    if a.isConstant then
+    if isConstant(a) then
         if a:evaluate(nullPoint) == 0 then
             return zero
-        elseif b.isConstant then
+        elseif isConstant(b) then
             if b:evaluate(nullPoint) == 0 then
                 return zero
             else
@@ -278,7 +323,7 @@ Expression__meta.__mul = function(a, b)
             return constProduct(a, b)
         end
     end
-    local product = baseExpression(productEval, productDerivative, productFormat, {a, b})
+    local product = createBaseExpression(nodeTypes.mul, productEval, productDerivative, productFormat, {a, b})
     return product
 end
 
@@ -293,7 +338,8 @@ local function quotientDerivative(self, withRespectTo)
     return (a.derivative[withRespectTo] * b - a * b.derivative[withRespectTo]) / (b * b)
 end
 local function quotientFormat(self)
-    return ("(%s) / (%s)"):format(tostring(self.parents[1]), tostring(self.parents[2]))
+    local p1, p2 = wrapParentsIfNeeded(self, self.parents)
+    return ("%s / %s"):format(p1, p2)
 end
 Expression__meta.__div = function(a, b)
     if type(a) == "number" then
@@ -301,14 +347,14 @@ Expression__meta.__div = function(a, b)
     end
     if type(b) == "number" then
         return (1/b) * a
-    elseif b.isConstant then
-        if a.isConstant then
+    elseif isConstant(b) then
+        if isConstant(a) then
             return M.const(a:evaluate(nullPoint)/b:evaluate(nullPoint))
         else
             return (1/b:evaluate(nullPoint)) * a
         end
     end
-    local quotient = baseExpression(quotientEval, quotientDerivative, quotientFormat, {a, b})
+    local quotient = createBaseExpression(nodeTypes.div, quotientEval, quotientDerivative, quotientFormat, {a, b})
     return quotient
 end
 
@@ -316,7 +362,7 @@ local function powerEval(self, point)
     return self.parents[1]:evaluate(point) ^ self.parents[2]:evaluate(point)
 end
 local function powerRuleDerivative(self, withRespectTo)
-    assert(self.parents[2].isConstant, "Power rule only works for constant exponents")
+    assert(isConstant(self.parents[2]), "Power rule only works for constant exponents")
     if not self.dependencies[withRespectTo] then
         return zero
     end
@@ -327,7 +373,7 @@ local function powerRuleDerivative(self, withRespectTo)
     return result
 end
 local function constantBasePowerDerivative(self, withRespectTo)
-    assert(self.parents[1].isConstant, "Constant base power derivative requires constant base")
+    assert(isConstant(self.parents[1]), "Constant base power derivative requires constant base")
     if not self.dependencies[withRespectTo] then
         return zero
     end
@@ -356,7 +402,8 @@ local function generalPowerDerivative(self, withRespectTo)
     return result
 end
 local function powerFormat(self)
-    return ("(%s)^(%s)"):format(tostring(self.parents[1]), tostring(self.parents[2]))
+    local p1, p2 = wrapParentsIfNeeded(self, self.parents)
+    return ("%s^%s"):format(p1, p2)
 end
 Expression__meta.__pow = function(a, b)
     if type(a) == "number" then
@@ -366,14 +413,14 @@ Expression__meta.__pow = function(a, b)
         b = M.const(b)
     end
     local calculateDerivative
-    if b.isConstant then
+    if isConstant(b) then
         if b:evaluate(nullPoint) == 0 then
             return M.const(1)
         elseif b:evaluate(nullPoint) == 1 then
             return a
         end
         calculateDerivative = powerRuleDerivative
-    elseif a.isConstant then
+    elseif isConstant(a) then
         if a:evaluate(nullPoint) == 0 then
             return zero
         end
@@ -381,7 +428,7 @@ Expression__meta.__pow = function(a, b)
     else
         calculateDerivative = generalPowerDerivative
     end
-    local power = baseExpression(powerEval, calculateDerivative, powerFormat, {a, b})
+    local power = createBaseExpression(nodeTypes.pow, powerEval, calculateDerivative, powerFormat, {a, b})
     return power
 end
 
@@ -427,7 +474,7 @@ FuncWrapper__meta.__call = function(self, arg)
     if type(arg) == "number" then
         arg = M.const(arg)
     end
-    local f = baseExpression(funcEval, funcDerivative, funcFormat, {arg})
+    local f = createBaseExpression(nodeTypes.func, funcEval, funcDerivative, funcFormat, {arg})
     f.repr = self.repr
     f.func = self.func
     f.funcWrapper = self
