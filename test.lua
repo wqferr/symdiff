@@ -1,9 +1,22 @@
 local symdiff = require "symdiff"
 
+local function printDeps(expr)
+    for var, _ in pairs(expr.dependencies) do
+        print(var.name)
+    end
+    print "-----"
+end
+
 local z = symdiff.var "z"
 local t = symdiff.var "t"
--- local expr = z*z + z
--- local expr = z*z - z
-local expr = z^3 - z
-
+local expr = z^2 - t + 1
+print(expr:evaluate {[z] = 2, [t] = -1})
+print(expr:evaluate {[z] = 2})
+print(expr.derivative[t]:evaluate {[z] = 0})
 print(expr.derivative[z])
+
+-- printDeps(2*z)
+-- printDeps(expr)
+-- printDeps(expr.derivative[t])
+-- printDeps(expr.derivative[z])
+-- printDeps(expr.derivative[z].derivative[z])

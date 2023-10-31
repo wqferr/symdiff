@@ -1,4 +1,9 @@
 --[[
+    TODO
+    merge consecutive sum / product nodes
+    fix dependency tracking when taking derivatives
+]]
+--[[
 Copyright © 2023 William Quelho Ferreira
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,7 +37,7 @@ local M = {}
 
 ---@class Expression
 ---@field name string?
----@field evaluate fun(self: Expression, point: number): number
+---@field eval fun(self: Expression, point: {Variable: number}): number|Expression
 ---@field format fun(self): string
 ---@field dependencies {Variable: boolean}
 ---@field calculateDerivative fun(self: Expression, variable: Variable)
@@ -91,10 +96,12 @@ local function merge(onto, new)
     end
 end
 
+-- Used for evaluating constants
+local nullPoint = {}
 ---@nodiscard
 local function baseExpression(eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
-    expr.evaluate = eval
+    expr.eval = eval
     expr.calculateDerivative = derivative
     expr.format = format
     expr.derivative = createDerivativeAccessor(expr)
@@ -106,8 +113,19 @@ local function baseExpression(eval, derivative, format, parents)
     return expr
 end
 
+---@param point {Variable: number}
+function M.Expression:evaluate(point)
+    local result = self:eval(point)
+    if type(result) ~= "number" then
+        -- for var, _ in pairs(point) do
+        --     result.dependencies[var] = nil
+        -- end
+    end
+    return result
+end
+
 local function varEval(self, point)
-    local givenValue = point[self] or point[self.name]
+    local givenValue = point[self]
     if givenValue then
         return givenValue
     else
@@ -128,7 +146,6 @@ end
 
 ---@return Variable
 function M.var(name)
-    -- local v = setmetatable({}, Expression__meta)
     ---@type Variable
     ---@diagnostic disable-next-line: assign-type-mismatch
     local v = baseExpression(varEval, varDerivative, varFormat)
@@ -187,14 +204,20 @@ end
 ---@param b Expression|number
 ---@return Expression
 Expression__meta.__add = function(a, b)
-    if type(b) == "number" then
-        a, b = b, a
-    end
     if type(a) == "number" then
         a = M.const(a)
     end
-    if a.isConstant and b.isConstant then
-        return M.const(a:evaluate(0) + b:evaluate(0))
+    if type(b) == "number" then
+        b = M.const(b)
+    end
+    if a.isConstant then
+        if a:evaluate(nullPoint) == 0 then
+            return b
+        elseif b.isConstant then
+            return M.const(a:evaluate(nullPoint) + b:evaluate(nullPoint))
+        end
+    elseif b.isConstant and b:evaluate(nullPoint) == 0 then
+        return a
     end
     local sum = baseExpression(sumEval, sumDerivative, sumFormat, {a, b})
     return sum
@@ -241,15 +264,15 @@ Expression__meta.__mul = function(a, b)
         a = M.const(a)
     end
     if a.isConstant then
-        if a:evaluate(0) == 0 then
+        if a:evaluate(nullPoint) == 0 then
             return zero
         elseif b.isConstant then
-            if b:evaluate(0) == 0 then
+            if b:evaluate(nullPoint) == 0 then
                 return zero
             else
-                return M.const(a:evaluate(0) * b:evaluate(0))
+                return M.const(a:evaluate(nullPoint) * b:evaluate(nullPoint))
             end
-        elseif a:evaluate(0) == 1 then
+        elseif a:evaluate(nullPoint) == 1 then
             return b
         else
             return constProduct(a, b)
@@ -280,9 +303,9 @@ Expression__meta.__div = function(a, b)
         return (1/b) * a
     elseif b.isConstant then
         if a.isConstant then
-            return M.const(a()/b())
+            return M.const(a:evaluate(nullPoint)/b:evaluate(nullPoint))
         else
-            return (1/b()) * a
+            return (1/b:evaluate(nullPoint)) * a
         end
     end
     local quotient = baseExpression(quotientEval, quotientDerivative, quotientFormat, {a, b})
@@ -297,16 +320,24 @@ local function powerRuleDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return self.parents[2] * self.parents[1] ^ (self.parents[2] - 1)
+    local result = self.parents[2] * self.parents[1] ^ (self.parents[2] - 1)
+    if type(result) ~= "number" then
+        result.dependencies[withRespectTo] = nil
+    end
+    return result
 end
 local function constantBasePowerDerivative(self, withRespectTo)
     assert(self.parents[1].isConstant, "Constant base power derivative requires constant base")
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return math.log(self.parents[1]:evaluate(0)) *
+    local result = math.log(self.parents[1]:evaluate(0)) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2].derivative[withRespectTo]
+    if type(result) ~= "number" then
+        result.dependencies[withRespectTo] = nil
+    end
+    return result
 end
 local function generalPowerDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
@@ -314,11 +345,15 @@ local function generalPowerDerivative(self, withRespectTo)
     end
     -- d/dx (f(x)^g(x)) =
     -- f(x)^g(x) * (g'(x)ln(f(x)) + (f'(x)g(x))/f(x))
-    return (self.parents[1] ^ self.parents[2]) *
+    local result = (self.parents[1] ^ self.parents[2]) *
         (
             self.parents[2].derivative[withRespectTo]*M.ln(self.parents[1]) +
             (self.parents[1].derivative[withRespectTo]*self.parents[2]) / self.parents[1]
         )
+    if type(result) ~= "number" then
+        result.dependencies[withRespectTo] = nil
+    end
+    return result
 end
 local function powerFormat(self)
     return ("(%s)^(%s)"):format(tostring(self.parents[1]), tostring(self.parents[2]))
@@ -332,12 +367,14 @@ Expression__meta.__pow = function(a, b)
     end
     local calculateDerivative
     if b.isConstant then
-        if b:evaluate(0) == 0 then
+        if b:evaluate(nullPoint) == 0 then
             return M.const(1)
+        elseif b:evaluate(nullPoint) == 1 then
+            return a
         end
         calculateDerivative = powerRuleDerivative
     elseif a.isConstant then
-        if a:evaluate(0) == 0 then
+        if a:evaluate(nullPoint) == 0 then
             return zero
         end
         calculateDerivative = constantBasePowerDerivative
