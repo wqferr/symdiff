@@ -42,6 +42,7 @@ local M = {}
 ---@field func fun(arg: number): number
 ---@field funcDerivative fun(arg: number): number
 ---@field repr string?
+---@field funcWrapper table?
 M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
@@ -213,7 +214,7 @@ local function constProductDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return self.parents[1](0) * --> constant!
+    return self.parents[1]:evaluate(0) * --> constant!
         self.parents[2].derivative[withRespectTo]
 end
 local function productDerivative(self, withRespectTo)
@@ -240,8 +241,14 @@ Expression__meta.__mul = function(a, b)
         a = M.const(a)
     end
     if a.isConstant then
-        if b.isConstant then
-            return M.const(a:evaluate(0) * b:evaluate(0))
+        if a:evaluate(0) == 0 then
+            return zero
+        elseif b.isConstant then
+            if b:evaluate(0) == 0 then
+                return zero
+            else
+                return M.const(a:evaluate(0) * b:evaluate(0))
+            end
         elseif a:evaluate(0) == 1 then
             return b
         else
@@ -325,12 +332,12 @@ Expression__meta.__pow = function(a, b)
     end
     local calculateDerivative
     if b.isConstant then
-        if b() == 0 then
+        if b:evaluate(0) == 0 then
             return M.const(1)
         end
         calculateDerivative = powerRuleDerivative
     elseif a.isConstant then
-        if a() == 0 then
+        if a:evaluate(0) == 0 then
             return zero
         end
         calculateDerivative = constantBasePowerDerivative
@@ -353,7 +360,12 @@ local function funcEval(self, point)
     if self.actsOnExpressions then
         return self.func(self.parents[1])
     else
-        return self.func(self.parents[1](point))
+        local arg = self.parents[1]:evaluate(point)
+        if type(arg) == "number" then
+            return self.func(arg)
+        else
+            return self.funcWrapper(arg)
+        end
     end
 end
 local function funcDerivative(self, withRespectTo)
@@ -375,9 +387,13 @@ local FuncWrapper__meta = {}
 FuncWrapper__meta.__index = FuncWrapper
 
 FuncWrapper__meta.__call = function(self, arg)
+    if type(arg) == "number" then
+        arg = M.const(arg)
+    end
     local f = baseExpression(funcEval, funcDerivative, funcFormat, {arg})
     f.repr = self.repr
-    f.func = self.eval
+    f.func = self.func
+    f.funcWrapper = self
     f.funcDerivative = self.funcDerivative
     return f
 end
@@ -402,7 +418,11 @@ end
 M.identity = M.func("id", function(x) return x end, true)
 M.reciproc = M.func(function(x) return ("1/(%s)"):format(x) end, function(x) return 1/x end, true)
 M.sqrt = M.func("sqrt", function(x) return math.sqrt(x) end)
-local sqrtDeriv = M.func(function(x) return ("1/(2*sqrt(%s))"):format(x) end, function(x) return 1/(2*M.sqrt(x)) end, true)
+local sqrtDeriv = M.func(
+    function(x) return ("1/(2*sqrt(%s))"):format(x) end,
+    function(x) return 1/(2*M.sqrt(x)) end,
+    true
+)
 M.sqrt:setDerivative(sqrtDeriv)
 
 M.ln = M.func("ln", math.log)
