@@ -41,10 +41,6 @@ local M = {}
 ---@field parents Expression[]
 ---@field derivative DerivativeAccessor
 ---@field cachedFormat string?
----@field func fun(arg: number): number
----@field funcDerivative fun(arg: number): number
----@field repr string?
----@field funcWrapper table?
 M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
@@ -55,6 +51,14 @@ Expression__meta.__index = M.Expression
 ---@field funcDerivative fun(arg: number): number
 ---@field actsOnExpressions boolean
 ---@field setDerivative fun(self: Function, arg: Function)
+
+
+---@class FunctionCall: Expression
+---@field repr (string|fun(arg: Expression): string)?
+---@field funcWrapper table?
+---@field func fun(arg: number): number
+---@field funcDerivative fun(arg: number): number
+---@field actsOnExpressions boolean
 
 local zero
 
@@ -514,6 +518,8 @@ FuncWrapper__meta.__call = function(self, arg)
     if type(arg) == "number" then
         arg = M.const(arg)
     end
+    ---@type FunctionCall
+    ---@diagnostic disable-next-line: assign-type-mismatch
     local f = createBaseExpression(nodeTypes.func, funcEval, funcDerivative, funcFormat, {arg})
     f.actsOnExpressions = self.actsOnExpressions
     f.repr = self.repr
