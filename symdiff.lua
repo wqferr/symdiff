@@ -628,12 +628,15 @@ M.cosh:setDerivative(M.sinh)
 
 M.sin = M.func("sin", math.sin)
 M.cos = M.func("cos", math.cos)
-local msin = M.func("-sin", function(x) return -M.sin(x) end, true)
-local mcos = M.func("-cos", function(x) return -M.cos(x) end, true)
+M.tan = M.func("tan", math.tan)
+local msin = M.func(nil, function(x) return -M.sin(x) end, true)
+local mcos = M.func(nil, function(x) return -M.cos(x) end, true)
+local sec2inv = M.func(nil, function(x) return 1/(M.cos(x))^2 end, true)
 
 M.sin:setDerivative(M.cos)
 M.cos:setDerivative(msin)
 msin:setDerivative(mcos)
 mcos:setDerivative(M.sin)
+M.tan:setDerivative(sec2inv)
 
 return M
