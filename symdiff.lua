@@ -37,6 +37,9 @@ local unpack = unpack or table.unpack
 local isNumeric = function(value)
     return type(value) == "number"
 end
+local isZero = function(value)
+    return value == 0
+end
 
 
 
@@ -328,12 +331,7 @@ local function constFormat(self)
     if self.name then
         return self.name
     else
-        local value = self:evaluate()
-        if value % 1 == 0 then
-            return ("%d"):format(value)
-        else
-            return ("%.3f"):format(value)
-        end
+        return ("%f"):format(self:evaluate())
     end
 end
 
@@ -373,10 +371,11 @@ Expression__meta.__add = function(a, b)
         a, b = b, a
     end
     if isConstant(a) then
-        if a:evaluate(nullPoint) == 0 then
+        local aEval = a:evaluate(nullPoint)
+        if isZero(aEval) then
             return b
         elseif isConstant(b) then
-            return M.const(a:evaluate(nullPoint) + b:evaluate(nullPoint))
+            return M.const(aEval + b:evaluate(nullPoint))
         end
     end
     return createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
@@ -403,10 +402,11 @@ Expression__meta.__sub = function(a, b)
         a, b = b, a
     end
     if isConstant(a) then
-        if a:evaluate(nullPoint) == 0 then
+        local aEval = a:evaluate(nullPoint)
+        if isZero(aEval) then
             return -b
         elseif isConstant(b) then
-            return M.const(a:evaluate(nullPoint) - b:evaluate(nullPoint))
+            return M.const(aEval - b:evaluate(nullPoint))
         end
     end
     return createBaseExpression(
@@ -478,10 +478,11 @@ Expression__meta.__mul = function(a, b)
         a, b = b, a
     end
     if isConstant(a) then
-        if a:evaluate(nullPoint) == 1 then
+        local aEval = a:evaluate(nullPoint)
+        if aEval == 1 then
             return b
         elseif isConstant(b) then
-            return M.const(a:evaluate(nullPoint) * b:evaluate(nullPoint))
+            return M.const(aEval * b:evaluate(nullPoint))
         else
             return constProduct(a, b)
         end
@@ -511,12 +512,15 @@ Expression__meta.__div = function(a, b)
         a = M.const(a)
     end
     if isNumeric(b) then
+        assert(not isZero(b), "Division by 0")
         return (1/b) * a
     elseif isConstant(b) then
+        local bEval = b:evaluate(nullPoint)
+        assert(not isZero(bEval), "Division by 0")
         if isConstant(a) then
-            return M.const(a:evaluate(nullPoint)/b:evaluate(nullPoint))
+            return M.const(a:evaluate(nullPoint) / bEval)
         else
-            return (1/b:evaluate(nullPoint)) * a
+            return (1/bEval) * a
         end
     end
     return createBaseExpression(
@@ -538,7 +542,9 @@ local function powerRuleDerivative(self, withRespectTo)
 end
 local function constantBasePowerDerivative(self, withRespectTo)
     assert(isConstant(self.parents[1]), "Constant base power derivative requires constant base")
-    local result = math.log(self.parents[1]:evaluate(nullPoint)) *
+    local point = self.parents[1]:evaluate(nullPoint)
+    assert(point > 0, "Cannot differentiate exponentials with negative bases")
+    local result = math.log(point) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2]:derivative(withRespectTo)
     return result
@@ -566,14 +572,14 @@ Expression__meta.__pow = function(a, b)
     end
     local calculateDerivative
     if isConstant(b) then
-        if b:evaluate(nullPoint) == 0 then
+        if isZero(b:evaluate(nullPoint)) then
             return one
         elseif b:evaluate(nullPoint) == 1 then
             return a
         end
         calculateDerivative = powerRuleDerivative
     elseif isConstant(a) then
-        if a:evaluate(nullPoint) == 0 then
+        if isZero(a:evaluate(nullPoint)) then
             return zero
         end
         calculateDerivative = constantBasePowerDerivative
@@ -665,14 +671,20 @@ function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
 end
 
----Changes the function that checks whether a value is numeric
----@param newCheck fun(value: any): boolean new function to be used in those checks
-M.setNumericCheck = function(newCheck)
-    isNumeric = newCheck
+---Changes core functions relating to numeric types
+---@param newIsNumeric fun(value: any): boolean new function to differentiate number values
+---@param newIsZero fun(value: number): boolean new function to detect a zero value
+M.setNumericChecks = function(newIsNumeric, newIsZero)
+    if newIsNumeric then
+        isNumeric = newIsNumeric
+    end
+    if newIsZero then
+        isZero = newIsZero
+    end
 end
 
 M.identity = M.func(function(x) return x end, true)
-M.reciproc = M.func(function(x) return 1/x end, true, function(x) return ("1/(%s)"):format(x) end)
+M.reciproc = M.func(function(x) return 1/x end, true)
 
 M.sqrt = M.func(function(x) return math.sqrt(x) end, false, "sqrt")
 local sqrtDeriv = M.func(
