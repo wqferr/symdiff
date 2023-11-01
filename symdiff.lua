@@ -222,8 +222,6 @@ local function wrapParentsIfNeeded(expr, parents)
     local results = {}
     local ps = priority(expr)
     for _, p in ipairs(parents) do
-        print(p.nodeType, expr.nodeType)
-        print(type(priority(p)), type(ps))
         local s = tostring(p)
         if priority(p) < ps then
             s = ("(%s)"):format(s)
