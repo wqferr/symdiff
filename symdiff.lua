@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
+--TODO FIXME what to do about non-"number" constants
+
 --- <h2>A module for symbolic differentiation in Lua</h2>
 -- @module symdiff
 -- @alias M
@@ -91,7 +93,7 @@ local FuncWrapper__meta = {}
 local zero, one
 
 ---@type Point
--- Used for evaluating constants
+-- Used for evaluating constants without littering memory space
 local nullPoint = {}
 
 ---@enum nodeTypes
@@ -618,15 +620,16 @@ FuncWrapper__meta.__call = function(self, arg)
     return f
 end
 
----@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
+--TODO FIXME order of args was changed!
 ---@param eval fun(arg: number): number
 ---@param actsOnExpressions boolean?
+---@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
 ---@return Function
-function M.func(repr, eval, actsOnExpressions)
+function M.func(eval, actsOnExpressions, repr)
     local wrapper = setmetatable({}, FuncWrapper__meta)
-    wrapper.repr = repr
     wrapper.func = eval
     wrapper.actsOnExpressions = actsOnExpressions
+    wrapper.repr = repr
     return wrapper
 end
 
@@ -635,36 +638,40 @@ function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
 end
 
-M.identity = M.func(nil, function(x) return x end, true)
-M.reciproc = M.func(function(x) return ("1/(%s)"):format(x) end, function(x) return 1/x end, true)
-M.sqrt = M.func("sqrt", function(x) return math.sqrt(x) end)
+M.identity = M.func(function(x) return x end, true)
+M.reciproc = M.func(function(x) return 1/x end, true, function(x) return ("1/(%s)"):format(x) end)
+
+M.sqrt = M.func(function(x) return math.sqrt(x) end, false, "sqrt")
 local sqrtDeriv = M.func(
-    nil,
     function(x) return 1/(2*M.sqrt(x)) end,
     true
 )
 M.sqrt:setDerivative(sqrtDeriv)
 
-M.ln = M.func("ln", math.log)
+M.ln = M.func(math.log, false, "ln")
 M.ln:setDerivative(M.reciproc)
 
-M.exp = M.func("exp", math.exp)
+M.exp = M.func(math.exp, false, "exp")
 M.exp:setDerivative(M.exp)
 
 local sinhF = function(x) return (M.exp(x) - M.exp(-x)) / 2 end
-M.sinh = M.func("sinh", sinhF, true)
+M.sinh = M.func(sinhF, true, "sinh")
 local coshF = function(x) return (M.exp(x) + M.exp(-x) / 2) end
-M.cosh = M.func("cosh", coshF, true)
+M.cosh = M.func(coshF, true, "cosh")
+local tanhF = function(x) return (M.exp(2*x) - 1) / (M.exp(2*x) + 1) end
+M.tanh = M.func(tanhF, true, "tanh")
+local tanhDeriv = M.func(function(x) return 1/M.cosh(x)^2 end, true)
+M.tanh:setDerivative(tanhDeriv)
 
 M.sinh:setDerivative(M.cosh)
 M.cosh:setDerivative(M.sinh)
 
-M.sin = M.func("sin", math.sin)
-M.cos = M.func("cos", math.cos)
-M.tan = M.func("tan", math.tan)
-local msin = M.func(nil, function(x) return -M.sin(x) end, true)
-local mcos = M.func(nil, function(x) return -M.cos(x) end, true)
-local sec2inv = M.func(nil, function(x) return 1/(M.cos(x))^2 end, true)
+M.sin = M.func(math.sin, false, "sin")
+M.cos = M.func(math.cos, false, "cos")
+M.tan = M.func(math.tan, false, "tan")
+local msin = M.func(function(x) return -M.sin(x) end, true)
+local mcos = M.func(function(x) return -M.cos(x) end, true)
+local sec2inv = M.func(function(x) return 1/(M.cos(x))^2 end, true)
 
 M.sin:setDerivative(M.cos)
 M.cos:setDerivative(msin)
