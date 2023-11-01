@@ -38,34 +38,34 @@ local unpack = unpack or table.unpack
 
 
 ---@class Expression
----@operator add(Variable|Expression|number): Expression
----@operator sub(Variable|Expression|number): Expression
----@operator mul(Variable|Expression|number): Expression
----@operator div(Variable|Expression|number): Expression
----@operator pow(Variable|Expression|number): Expression
----@field cachedDerivatives {Variable: Expression}
----@field name string?
----@field nodeType string
----@field eval fun(self: Expression, point: Point): number|Expression
----@field format fun(self): string
----@field dependencies {Variable: boolean}
----@field calculateDerivative fun(self: Expression, variable: Variable)
----@field parents Expression[]
----@field derivative DerivativeAccessor
----@field cachedFormat string?
+---@operator add(AlgebraicTerm): Expression
+---@operator sub(AlgebraicTerm): Expression
+---@operator mul(AlgebraicTerm): Expression
+---@operator div(AlgebraicTerm): Expression
+---@operator pow(AlgebraicTerm): Expression
+---@field public derivative DerivativeAccessor
+---@field package cachedDerivatives {Variable: Expression}
+---@field package name string?
+---@field package nodeType string
+---@field package eval fun(self: Expression, point: Point): number|Expression
+---@field package format fun(self): string
+---@field package dependencies {Variable: boolean}
+---@field package calculateDerivative fun(self: Expression, variable: Variable)
+---@field package parents Expression[]
+---@field package cachedFormat string?
 M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
 
 ---@class Variable: Expression
----@operator add(Variable|Expression|number): Expression
----@operator sub(Variable|Expression|number): Expression
----@operator mul(Variable|Expression|number): Expression
----@operator div(Variable|Expression|number): Expression
----@operator pow(Variable|Expression|number): Expression
+---@operator add(AlgebraicTerm): Expression
+---@operator sub(AlgebraicTerm): Expression
+---@operator mul(AlgebraicTerm): Expression
+---@operator div(AlgebraicTerm): Expression
+---@operator pow(AlgebraicTerm): Expression
 
 ---@class Function
----@operator call(Variable|Expression|number): Expression
+---@operator call(AlgebraicTerm): Expression
 ---@field name string
 ---@field func fun(arg: number): number
 ---@field funcDerivative Function
@@ -85,6 +85,8 @@ local FuncWrapper__meta = {}
 ---@alias Point
 ---|{Variable: number} a mapping for the value of each variable at the point
 ---|number the value of the single variable of the Expression
+
+---@alias AlgebraicTerm Variable|Expression|number
 
 local zero, one
 
@@ -601,8 +603,6 @@ end
 
 FuncWrapper__meta.__index = FuncWrapper
 
----kfldsjflkasldf
----@return Expression
 FuncWrapper__meta.__call = function(self, arg)
     if type(arg) == "number" then
         arg = M.const(arg)
