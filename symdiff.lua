@@ -1,8 +1,4 @@
 --[[
-    TODO
-    merge consecutive sum / product nodes
-]]
---[[
 Copyright © 2023 William Quelho Ferreira
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -44,6 +40,7 @@ local M = {}
 ---@field calculateDerivative fun(self: Expression, variable: Variable)
 ---@field parents Expression[]
 ---@field derivative DerivativeAccessor
+---@field cachedFormat string?
 ---@field func fun(arg: number): number
 ---@field funcDerivative fun(arg: number): number
 ---@field repr string?
@@ -59,6 +56,7 @@ Expression__meta.__index = M.Expression
 ---@field actsOnExpressions boolean
 ---@field setDerivative fun(self: Function, arg: Function)
 
+local zero
 
 ---@class DerivativeAccessor: {Variable: Expression}
 local DerivativeAccessor__meta = {}
@@ -68,7 +66,16 @@ DerivativeAccessor__meta.__index = function(t, k)
     end
     return t[k]
 end
--- TODO __call when dependencies has only one element
+DerivativeAccessor__meta.__call = function(t, arg)
+    local onlyDep = next(t.expression.dependencies)
+    if not onlyDep then
+        return zero
+    end
+    if next(t.expression.dependencies, onlyDep) then
+        error("Cannot call derivative without index in expression with multiple dependencies")
+    end
+    return t[onlyDep]
+end
 
 local nodeTypes = {
     const = "constant",
@@ -84,12 +91,13 @@ local nodeTypes = {
 setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..tostring(k)) end})
 
 local priorities = {
+    [nodeTypes.func] = 11,
     [nodeTypes.const] = 10,
     [nodeTypes.var] = 10,
     [nodeTypes.unm] = 9,
     [nodeTypes.pow] = 8,
+    [nodeTypes.div] = 3,
     [nodeTypes.mul] = 2,
-    [nodeTypes.div] = 2,
     [nodeTypes.diff] = 1,
     [nodeTypes.sum] = 1,
 }
@@ -103,13 +111,8 @@ local function createDerivativeAccessor(expression)
     return accessor
 end
 
-local function clone(t)
-    local new = {}
-    for k, v in pairs(t) do
-        new[k] = v
-    end
-    return new
-end
+-- Used for evaluating constants
+local nullPoint = {}
 
 ---@param dependent Expression
 ---@param dependencyVariable Variable
@@ -123,8 +126,6 @@ local function merge(onto, new)
     end
 end
 
--- Used for evaluating constants
-local nullPoint = {}
 ---@nodiscard
 local function createBaseExpression(nodeType, eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
@@ -134,6 +135,7 @@ local function createBaseExpression(nodeType, eval, derivative, format, parents)
     expr.format = format
     expr.derivative = createDerivativeAccessor(expr)
     expr.dependencies = {}
+    expr.cachedFormat = nil
     for _, parent in ipairs(parents or {}) do
         merge(expr.dependencies, parent.dependencies)
     end
@@ -144,11 +146,6 @@ end
 ---@param point {Variable: number}
 function M.Expression:evaluate(point)
     local result = self:eval(point)
-    if type(result) ~= "number" then
-        -- for var, _ in pairs(point) do
-        --     result.dependencies[var] = nil
-        -- end
-    end
     return result
 end
 
@@ -160,7 +157,6 @@ local function varEval(self, point)
         return self
     end
 end
-local zero
 local function varDerivative(self, withRespectTo)
     if self == withRespectTo then
         return M.const(1)
@@ -222,9 +218,11 @@ local function wrapParentsIfNeeded(expr, parents)
     local results = {}
     local ps = priority(expr)
     for _, p in ipairs(parents) do
+        print(p.nodeType, expr.nodeType)
+        print(type(priority(p)), type(ps))
         local s = tostring(p)
         if priority(p) < ps then
-            s = "("..s..")"
+            s = ("(%s)"):format(s)
         end
         table.insert(results, s)
     end
@@ -327,7 +325,7 @@ local function constProductDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return self.parents[1]:evaluate(0) * --> constant!
+    return self.parents[1]:evaluate(nullPoint) *
         self.parents[2].derivative[withRespectTo]
 end
 local function productDerivative(self, withRespectTo)
@@ -422,7 +420,7 @@ local function constantBasePowerDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    local result = math.log(self.parents[1]:evaluate(0)) *
+    local result = math.log(self.parents[1]:evaluate(nullPoint)) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2].derivative[withRespectTo]
     return result
@@ -472,11 +470,10 @@ Expression__meta.__pow = function(a, b)
 end
 
 Expression__meta.__tostring = function(self)
-    if type(self.format) == "string" then
-        return self.format
-    else
-        return self:format()
+    if not self.cachedFormat then
+        self.cachedFormat = self:format()
     end
+    return self.cachedFormat
 end
 
 local function funcEval(self, point)
@@ -500,8 +497,12 @@ end
 local function funcFormat(self)
     if type(self.repr) == "string" then
         return ("%s(%s)"):format(self.repr, tostring(self.parents[1]))
-    else
+    elseif self.repr then
         return self.repr(self.parents[1])
+    elseif self.actsOnExpressions then
+        return tostring(self.func(self.parents[1]))
+    else
+        error("Function passed nil to repr argument without specifying actsOnExpressions")
     end
 end
 
@@ -514,6 +515,7 @@ FuncWrapper__meta.__call = function(self, arg)
         arg = M.const(arg)
     end
     local f = createBaseExpression(nodeTypes.func, funcEval, funcDerivative, funcFormat, {arg})
+    f.actsOnExpressions = self.actsOnExpressions
     f.repr = self.repr
     f.func = self.func
     f.funcWrapper = self
@@ -521,7 +523,7 @@ FuncWrapper__meta.__call = function(self, arg)
     return f
 end
 
----@param repr string|fun(Expression): string
+---@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format expression
 ---@param eval fun(arg: number): number
 ---@param actsOnExpressions boolean?
 ---@return Function
@@ -542,7 +544,8 @@ M.identity = M.func("id", function(x) return x end, true)
 M.reciproc = M.func(function(x) return ("1/(%s)"):format(x) end, function(x) return 1/x end, true)
 M.sqrt = M.func("sqrt", function(x) return math.sqrt(x) end)
 local sqrtDeriv = M.func(
-    function(x) return ("1/(2*sqrt(%s))"):format(x) end,
+    -- function(x) return ("1/(2*sqrt(%s))"):format(x) end,
+    nil,
     function(x) return 1/(2*M.sqrt(x)) end,
     true
 )
