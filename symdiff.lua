@@ -20,21 +20,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
+--[[
+    TODO auto detect derivatives of functions that act on expressions
+]]
+
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
 
 local M = {}
 
---@field derivative Expression|fun(self: table, point: number): number
---@field cachedDerivatives {Variable: Expression}
---@field isConstant boolean?
 
 ---@class Variable: Expression
 
 ---@class Expression
+---@field cachedDerivatives {Variable: Expression}
 ---@field name string?
 ---@field nodeType string
----@field eval fun(self: Expression, point: {Variable: number}): number|Expression
+---@field eval fun(self: Expression, point: Point): number|Expression
 ---@field format fun(self): string
 ---@field dependencies {Variable: boolean}
 ---@field calculateDerivative fun(self: Expression, variable: Variable)
@@ -48,39 +50,70 @@ Expression__meta.__index = M.Expression
 ---@class Function
 ---@field name string
 ---@field func fun(arg: number): number
----@field funcDerivative fun(arg: number): number
----@field actsOnExpressions boolean
+---@field funcDerivative Function
+---@field actsOnExpressions boolean?
 ---@field setDerivative fun(self: Function, arg: Function)
-
+---@field repr (string|fun(arg: Expression): string)?
+local FuncWrapper = {}
+local FuncWrapper__meta = {}
 
 ---@class FunctionCall: Expression
 ---@field repr (string|fun(arg: Expression): string)?
 ---@field funcWrapper table?
 ---@field func fun(arg: number): number
----@field funcDerivative fun(arg: number): number
----@field actsOnExpressions boolean
+---@field funcDerivative Function
+---@field actsOnExpressions boolean?
 
-local zero
+---@alias Point {Variable: number}|number
+
+local zero, one
+
+-- Used for evaluating constants
+---@type Point
+local nullPoint = {}
+
+
+local function getOnlyDependency(expr)
+    local onlyDep = next(expr.dependencies)
+    if not onlyDep then
+        return nil, "expression is constant"
+    elseif next(expr.dependencies, onlyDep) then
+        return nil, "multiple dependencies"
+    else
+        return onlyDep, nil
+    end
+end
 
 ---@class DerivativeAccessor: {Variable: Expression}
+---@field expression Expression
 local DerivativeAccessor__meta = {}
+
+---@param t DerivativeAccessor
+---@param k Variable variable with respect to which to differentiate
 DerivativeAccessor__meta.__index = function(t, k)
     if not rawget(t, k) then
         t[k] = t.expression:calculateDerivative(k)
     end
     return t[k]
 end
-DerivativeAccessor__meta.__call = function(t, arg)
-    local onlyDep = next(t.expression.dependencies)
+---@param t DerivativeAccessor
+---@param point Point
+DerivativeAccessor__meta.__call = function(t, point)
+    local onlyDep, reason = getOnlyDependency(t.expression)
     if not onlyDep then
-        return zero
+        ---@cast reason string
+        if reason:find "constant" then
+            return zero
+        elseif reason:find "multiple" then
+            error("Cannot call derivative without index in expression with multiple dependencies")
+        else
+            error("An unknown error has occurred")
+        end
     end
-    if next(t.expression.dependencies, onlyDep) then
-        error("Cannot call derivative without index in expression with multiple dependencies")
-    end
-    return t[onlyDep]
+    return t[onlyDep]:evaluate(point)
 end
 
+---@enum nodeTypes
 local nodeTypes = {
     const = "constant",
     var = "variable",
@@ -94,6 +127,7 @@ local nodeTypes = {
 }
 setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..tostring(k)) end})
 
+---@enum priorities
 local priorities = {
     [nodeTypes.func] = 11,
     [nodeTypes.const] = 10,
@@ -115,9 +149,6 @@ local function createDerivativeAccessor(expression)
     return accessor
 end
 
--- Used for evaluating constants
-local nullPoint = {}
-
 ---@param dependent Expression
 ---@param dependencyVariable Variable
 local function addDependency(dependent, dependencyVariable)
@@ -130,6 +161,11 @@ local function merge(onto, new)
     end
 end
 
+---@param nodeType nodeTypes
+---@param eval fun(p: Point): Expression|number
+---@param derivative any
+---@param format any
+---@param parents any
 ---@nodiscard
 local function createBaseExpression(nodeType, eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
@@ -147,8 +183,21 @@ local function createBaseExpression(nodeType, eval, derivative, format, parents)
     return expr
 end
 
----@param point {Variable: number}
+---@param point Point
 function M.Expression:evaluate(point)
+    if type(point) == "number" then
+        local onlyDep, reason = getOnlyDependency(self)
+        ---@cast reason string
+        if onlyDep then
+            point = {[onlyDep] = point}
+        elseif reason:find "constant" then
+            point = nullPoint
+        elseif reason:find "multiple" then
+            error("Cannot use implicit variable points when there's multiple dependencies")
+        else
+            error("An unknown error has occurred")
+        end
+    end
     local result = self:eval(point)
     return result
 end
@@ -163,7 +212,7 @@ local function varEval(self, point)
 end
 local function varDerivative(self, withRespectTo)
     if self == withRespectTo then
-        return M.const(1)
+        return one
     else
         return zero
     end
@@ -172,6 +221,7 @@ local function varFormat(self)
     return self.name
 end
 
+---@param name string
 ---@return Variable
 function M.var(name)
     ---@type Variable
@@ -212,7 +262,7 @@ function M.const(value, name)
     return c
 end
 zero = M.const(0)
-M.zero = zero
+one = M.const(1)
 
 local function isConstant(expr)
     return expr.nodeType == nodeTypes.const
@@ -376,7 +426,7 @@ Expression__meta.__mul = function(a, b)
 end
 
 local function quotientEval(self, point)
-    return self.parents[1](point) / self.parents[2](point)
+    return self.parents[1]:evaluate(point) / self.parents[2]:evaluate(point)
 end
 local function quotientDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
@@ -454,7 +504,7 @@ Expression__meta.__pow = function(a, b)
     local calculateDerivative
     if isConstant(b) then
         if b:evaluate(nullPoint) == 0 then
-            return M.const(1)
+            return one
         elseif b:evaluate(nullPoint) == 1 then
             return a
         end
@@ -471,16 +521,9 @@ Expression__meta.__pow = function(a, b)
     return power
 end
 
-Expression__meta.__tostring = function(self)
-    if not self.cachedFormat then
-        self.cachedFormat = self:format()
-    end
-    return self.cachedFormat
-end
-
 local function funcEval(self, point)
     if self.actsOnExpressions then
-        return self.func(self.parents[1])
+        return self.func(self.parents[1]):evaluate(point)
     else
         local arg = self.parents[1]:evaluate(point)
         if type(arg) == "number" then
@@ -494,7 +537,15 @@ local function funcDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return self.parents[1].derivative[withRespectTo] * self.funcDerivative(self.parents[1])
+    local selfDeriv
+    if self.funcDerivative then
+        selfDeriv = self.funcDerivative(self.parents[1])
+    elseif self.actsOnExpressions then
+        selfDeriv = self.func(self.parents[1]).derivative[withRespectTo]
+    else
+        error("No known method for computing derivative of user-specified function")
+    end
+    return self.parents[1].derivative[withRespectTo] * selfDeriv
 end
 local function funcFormat(self)
     if type(self.repr) == "string" then
@@ -508,10 +559,17 @@ local function funcFormat(self)
     end
 end
 
-local FuncWrapper = {}
-local FuncWrapper__meta = {}
+Expression__meta.__tostring = function(self)
+    if not self.cachedFormat then
+        self.cachedFormat = self:format()
+    end
+    return self.cachedFormat
+end
+
 FuncWrapper__meta.__index = FuncWrapper
 
+---kfldsjflkasldf
+---@return Expression
 FuncWrapper__meta.__call = function(self, arg)
     if type(arg) == "number" then
         arg = M.const(arg)
@@ -544,11 +602,10 @@ function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
 end
 
-M.identity = M.func("id", function(x) return x end, true)
+M.identity = M.func(nil, function(x) return x end, true)
 M.reciproc = M.func(function(x) return ("1/(%s)"):format(x) end, function(x) return 1/x end, true)
 M.sqrt = M.func("sqrt", function(x) return math.sqrt(x) end)
 local sqrtDeriv = M.func(
-    -- function(x) return ("1/(2*sqrt(%s))"):format(x) end,
     nil,
     function(x) return 1/(2*M.sqrt(x)) end,
     true
