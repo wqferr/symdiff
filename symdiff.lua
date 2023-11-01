@@ -36,9 +36,13 @@ M._VERSION = "1.0.0"
 local unpack = unpack or table.unpack
 
 
----@class Variable: Expression
 
 ---@class Expression
+---@operator add(Variable|Expression|number): Expression
+---@operator sub(Variable|Expression|number): Expression
+---@operator mul(Variable|Expression|number): Expression
+---@operator div(Variable|Expression|number): Expression
+---@operator pow(Variable|Expression|number): Expression
 ---@field cachedDerivatives {Variable: Expression}
 ---@field name string?
 ---@field nodeType string
@@ -53,7 +57,15 @@ M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
 
+---@class Variable: Expression
+---@operator add(Variable|Expression|number): Expression
+---@operator sub(Variable|Expression|number): Expression
+---@operator mul(Variable|Expression|number): Expression
+---@operator div(Variable|Expression|number): Expression
+---@operator pow(Variable|Expression|number): Expression
+
 ---@class Function
+---@operator call(Variable|Expression|number): Expression
 ---@field name string
 ---@field func fun(arg: number): number
 ---@field funcDerivative Function
@@ -79,53 +91,6 @@ local zero, one
 ---@type Point
 -- Used for evaluating constants
 local nullPoint = {}
-
-
----Get this Expression's dependency, if is the only dependency
----@param expr Expression
----@return Variable? dep the dependency, if single, nil otherwise
----@return string? reason the reason a single dependency couldn't be fetched
-local function getOnlyDependency(expr)
-    local onlyDep = next(expr.dependencies)
-    if not onlyDep then
-        return nil, "expression is constant"
-    elseif next(expr.dependencies, onlyDep) then
-        return nil, "multiple dependencies"
-    else
-        return onlyDep
-    end
-end
-
----@class DerivativeAccessor: {Variable: Expression}
----@field expression Expression
-local DerivativeAccessor__meta = {}
-
----@param t DerivativeAccessor
----@param k Variable variable with respect to which to differentiate
----@nodiscard
-DerivativeAccessor__meta.__index = function(t, k)
-    if not rawget(t, k) then
-        t[k] = t.expression:calculateDerivative(k)
-    end
-    return t[k]
-end
----@param t DerivativeAccessor
----@param point Point the point at which to evaluate the derivative
----@nodiscard
-DerivativeAccessor__meta.__call = function(t, point)
-    local onlyDep, reason = getOnlyDependency(t.expression)
-    if not onlyDep then
-        ---@cast reason string
-        if reason:find "constant" then
-            return zero
-        elseif reason:find "multiple" then
-            error("Cannot call derivative without index in expression with multiple dependencies")
-        else
-            error("An unknown error has occurred")
-        end
-    end
-    return t[onlyDep]:evaluate(point)
-end
 
 ---@enum nodeTypes
 local nodeTypes = {
@@ -153,6 +118,56 @@ local priorities = {
     [nodeTypes.diff] = 1,
     [nodeTypes.sum] = 1,
 }
+
+---Get this Expression's dependency, if is the only dependency
+---@param expr Expression
+---@return Variable? dep the dependency, if single, nil otherwise
+---@return string? reason the reason a single dependency couldn't be fetched
+local function getOnlyDependency(expr)
+    local onlyDep = next(expr.dependencies)
+    if not onlyDep then
+        return nil, "expression is constant"
+    elseif next(expr.dependencies, onlyDep) then
+        return nil, "multiple dependencies"
+    else
+        return onlyDep
+    end
+end
+
+---@class DerivativeAccessor
+---@operator call(Variable): Expression
+---@operator call(Point): Expression|number
+---@field expression Expression
+local DerivativeAccessor__meta = {}
+
+DerivativeAccessor__meta.__call = function(accessor, expression, arg)
+    if type(arg) == "table" and arg.nodeType == nodeTypes.var then
+        if not accessor[arg] then
+            ---@cast arg Variable
+            if expression.dependencies[arg] then
+                accessor[arg] = expression:calculateDerivative(arg)
+            else
+                accessor[arg] = zero
+            end
+        end
+        return accessor[arg]
+    else
+        ---@cast arg Point
+        local onlyDep, reason = getOnlyDependency(expression)
+        if not onlyDep then
+            ---@cast reason string
+            if reason:find "constant" then
+                return zero
+            elseif reason:find "multiple" then
+                error("Cannot call derivative without index in expression with multiple dependencies")
+            else
+                error("An unknown error has occurred")
+            end
+        end
+        return accessor(expression, onlyDep):evaluate(arg)
+    end
+end
+
 ---Get the priority value of a given Expression node
 ---@param expression Expression
 ---@return number
@@ -274,7 +289,7 @@ local function varFormat(self)
     return self.name
 end
 
----@param name string
+---@param name string the name of the variable
 ---@return Variable
 function M.var(name)
     ---@type Variable
@@ -333,18 +348,13 @@ local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
 end
 local function sumDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
-    return self.parents[1].derivative[withRespectTo] +
-        self.parents[2].derivative[withRespectTo]
+    return self.parents[1]:derivative(withRespectTo) +
+        self.parents[2]:derivative(withRespectTo)
 end
 local function sumFormat(self)
     return ("%s + %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
----@param a Expression|number
----@param b Expression|number
----@return Expression
+
 Expression__meta.__add = function(a, b)
     if type(a) == "number" then
         a = M.const(a)
@@ -369,11 +379,8 @@ local function diffEval(self, point)
     return self.parents[1]:evaluate(point) - self.parents[2]:evaluate(point)
 end
 local function diffDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
-    return self.parents[1].derivative[withRespectTo] -
-        self.parents[2].derivative[withRespectTo]
+    return self.parents[1]:derivative(withRespectTo) -
+        self.parents[2]:derivative(withRespectTo)
 end
 local function diffFormat(self)
     return ("%s - %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
@@ -402,10 +409,7 @@ local function unmEval(self, point)
     return -self.parents[1]:evaluate(point)
 end
 local function unmDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
-    return -self.parents[1].derivative[withRespectTo]
+    return -self.parents[1]:derivative(withRespectTo)
 end
 local function unmFormat(self)
     local p1 = wrapParentsIfNeeded(self, self.parents)
@@ -422,18 +426,12 @@ local function productEval(self, point)
     return self.parents[1]:evaluate(point) * self.parents[2]:evaluate(point)
 end
 local function constProductDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     return self.parents[1]:evaluate(nullPoint) *
-        self.parents[2].derivative[withRespectTo]
+        self.parents[2]:derivative(withRespectTo)
 end
 local function productDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     local p1, p2 = self.parents[1], self.parents[2]
-    return p1*p2.derivative[withRespectTo] + p1.derivative[withRespectTo]*p2
+    return p1*p2:derivative(withRespectTo) + p1:derivative(withRespectTo)*p2
 end
 local function productFormat(self)
     local p1, p2 = wrapParentsIfNeeded(self, self.parents)
@@ -477,11 +475,8 @@ local function quotientEval(self, point)
     return self.parents[1]:evaluate(point) / self.parents[2]:evaluate(point)
 end
 local function quotientDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     local a, b = self.parents[1], self.parents[2]
-    return (a.derivative[withRespectTo] * b - a * b.derivative[withRespectTo]) / (b * b)
+    return (a:derivative(withRespectTo) * b - a * b:derivative(withRespectTo)) / (b * b)
 end
 local function quotientFormat(self)
     local p1, p2 = wrapParentsIfNeeded(self, self.parents)
@@ -509,32 +504,23 @@ local function powerEval(self, point)
 end
 local function powerRuleDerivative(self, withRespectTo)
     assert(isConstant(self.parents[2]), "Power rule only works for constant exponents")
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     local result = self.parents[2] * self.parents[1] ^ (self.parents[2] - 1)
     return result
 end
 local function constantBasePowerDerivative(self, withRespectTo)
     assert(isConstant(self.parents[1]), "Constant base power derivative requires constant base")
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     local result = math.log(self.parents[1]:evaluate(nullPoint)) *
         (self.parents[1]^self.parents[2]) *
-        self.parents[2].derivative[withRespectTo]
+        self.parents[2]:derivative(withRespectTo)
     return result
 end
 local function generalPowerDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     -- d/dx (f(x)^g(x)) =
     -- f(x)^g(x) * (g'(x)ln(f(x)) + (f'(x)g(x))/f(x))
     local result = (self.parents[1] ^ self.parents[2]) *
         (
-            self.parents[2].derivative[withRespectTo]*M.ln(self.parents[1]) +
-            (self.parents[1].derivative[withRespectTo]*self.parents[2]) / self.parents[1]
+            self.parents[2]:derivative(withRespectTo)*M.ln(self.parents[1]) +
+            (self.parents[1]:derivative(withRespectTo)*self.parents[2]) / self.parents[1]
         )
     return result
 end
@@ -582,18 +568,15 @@ local function funcEval(self, point)
     end
 end
 local function funcDerivative(self, withRespectTo)
-    if not self.dependencies[withRespectTo] then
-        return zero
-    end
     local selfDeriv
     if self.funcDerivative then
         selfDeriv = self.funcDerivative(self.parents[1])
     elseif self.actsOnExpressions then
-        selfDeriv = self.func(self.parents[1]).derivative[withRespectTo]
+        selfDeriv = self.func(self.parents[1]):derivative(withRespectTo)
     else
         error("No known method for computing derivative of user-specified function")
     end
-    return self.parents[1].derivative[withRespectTo] * selfDeriv
+    return self.parents[1]:derivative(withRespectTo) * selfDeriv
 end
 local function funcFormat(self)
     if type(self.repr) == "string" then
