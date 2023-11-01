@@ -164,7 +164,11 @@ DerivativeAccessor__meta.__call = function(accessor, expression, arg)
                 error("An unknown error has occurred")
             end
         end
-        return accessor(expression, onlyDep):evaluate(arg)
+        if arg then
+            return accessor(expression, onlyDep):evaluate(arg)
+        else
+            return accessor(expression, onlyDep)
+        end
     end
 end
 
@@ -177,12 +181,10 @@ local function getPriority(expression)
 end
 
 ---Create a new derivative accessor for the given Expression
----@param expression Expression
 ---@return DerivativeAccessor
 ---@nodiscard
-local function createDerivativeAccessor(expression)
+local function createDerivativeAccessor()
     local accessor = setmetatable({}, DerivativeAccessor__meta)
-    accessor.expression = expression
     return accessor
 end
 
@@ -236,7 +238,7 @@ end
 local function createBaseExpression(nodeType, eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
     expr.nodeType = nodeType
-    expr.derivative = createDerivativeAccessor(expr)
+    expr.derivative = createDerivativeAccessor()
     expr.dependencies = {}
     expr.cachedFormat = nil
     expr.parents = parents
