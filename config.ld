@@ -1,5 +1,0 @@
-project = "symdiff"
-file = "symdiff.lua"
-dir = "docs"
-title = "SymDiff documentation"
-description = "Symbolic differentiation in pure Lua"

@@ -49,8 +49,6 @@ local unpack = unpack or table.unpack
 ---@field parents Expression[]
 ---@field derivative DerivativeAccessor
 ---@field cachedFormat string?
---- An algebraic expression of variables.
--- @type Expression
 M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
@@ -62,8 +60,6 @@ Expression__meta.__index = M.Expression
 ---@field actsOnExpressions boolean?
 ---@field setDerivative fun(self: Function, arg: Function)
 ---@field repr (string|fun(arg: Expression): string)?
--- A wrapper for mathematical functions.
--- @type Function
 local FuncWrapper = {}
 local FuncWrapper__meta = {}
 
@@ -74,7 +70,9 @@ local FuncWrapper__meta = {}
 ---@field funcDerivative Function
 ---@field actsOnExpressions boolean?
 
----@alias Point {Variable: number}|number
+---@alias Point
+---|{Variable: number} a mapping for the value of each variable at the point
+---|number the value of the single variable of the Expression
 
 local zero, one
 
@@ -82,9 +80,11 @@ local zero, one
 -- Used for evaluating constants
 local nullPoint = {}
 
--- @type Variable
 
-
+---Get this Expression's dependency, if is the only dependency
+---@param expr Expression
+---@return Variable? dep the dependency, if single, nil otherwise
+---@return string? reason the reason a single dependency couldn't be fetched
 local function getOnlyDependency(expr)
     local onlyDep = next(expr.dependencies)
     if not onlyDep then
@@ -92,20 +92,17 @@ local function getOnlyDependency(expr)
     elseif next(expr.dependencies, onlyDep) then
         return nil, "multiple dependencies"
     else
-        return onlyDep, nil
+        return onlyDep
     end
 end
 
 ---@class DerivativeAccessor: {Variable: Expression}
 ---@field expression Expression
--- Cached derivative accessor for expressions.
--- @type DerivativeAccessor
 local DerivativeAccessor__meta = {}
 
 ---@param t DerivativeAccessor
 ---@param k Variable variable with respect to which to differentiate
--- @tparam DerivativeAccessor t
--- @tparam Variable k
+---@nodiscard
 DerivativeAccessor__meta.__index = function(t, k)
     if not rawget(t, k) then
         t[k] = t.expression:calculateDerivative(k)
@@ -113,7 +110,8 @@ DerivativeAccessor__meta.__index = function(t, k)
     return t[k]
 end
 ---@param t DerivativeAccessor
----@param point Point
+---@param point Point the point at which to evaluate the derivative
+---@nodiscard
 DerivativeAccessor__meta.__call = function(t, point)
     local onlyDep, reason = getOnlyDependency(t.expression)
     if not onlyDep then
@@ -155,10 +153,18 @@ local priorities = {
     [nodeTypes.diff] = 1,
     [nodeTypes.sum] = 1,
 }
-local function priority(expression)
+---Get the priority value of a given Expression node
+---@param expression Expression
+---@return number
+---@nodiscard
+local function getPriority(expression)
     return priorities[expression.nodeType]
 end
 
+---Create a new derivative accessor for the given Expression
+---@param expression Expression
+---@return DerivativeAccessor
+---@nodiscard
 local function createDerivativeAccessor(expression)
     local accessor = setmetatable({}, DerivativeAccessor__meta)
     accessor.expression = expression
@@ -171,35 +177,66 @@ local function addDependency(dependent, dependencyVariable)
     dependent.dependencies[dependencyVariable] = true
 end
 
+---Merge two maps, prioritizing the new keys
+---@param onto table
+---@param new table
 local function merge(onto, new)
     for k, v in pairs(new) do
         onto[k] = v
     end
 end
 
----@param nodeType nodeTypes
----@param eval fun(p: Point): Expression|number
----@param derivative any
----@param format any
----@param parents any
+---Check whether expr is a constant node or not
+---@param expr Expression the expression to check
+---@return boolean const true if and only if expr is a constant node
+local function isConstant(expr)
+    return expr.nodeType == nodeTypes.const
+end
+
+---Wrap parents of the Expression expr in parens if needed
+---@param expr Expression the expression being evaluated as a string
+---@param parents Expression[] operands of the given Expression
+---@return string ... tostring(p) for every p in parents, wrapped with parentheses if necessary
+local function wrapParentsIfNeeded(expr, parents)
+    local results = {}
+    local ps = getPriority(expr)
+    for _, p in ipairs(parents) do
+        local s = tostring(p)
+        if getPriority(p) < ps then
+            s = ("(%s)"):format(s)
+        end
+        table.insert(results, s)
+    end
+    return unpack(results)
+end
+
+---Create a new Expression node
+---@param nodeType nodeTypes type of the node being created
+---@param eval fun(e: Expression, p: Point): Expression|number evaluation function based on the Expression's parents
+---@param derivative fun(e: Expression, withRespectTo: Variable): Expression evaluation function for the expression's derivative based on its parents
+---@param format fun(e: Expression): string function for representing the Expression as a string
+---@param parents Expression[] parents of the expression, usually the operands
+---@return Expression expr the newly created Expression node
 ---@nodiscard
 local function createBaseExpression(nodeType, eval, derivative, format, parents)
     local expr = setmetatable({}, Expression__meta)
     expr.nodeType = nodeType
-    expr.eval = eval
-    expr.calculateDerivative = derivative
-    expr.format = format
     expr.derivative = createDerivativeAccessor(expr)
     expr.dependencies = {}
     expr.cachedFormat = nil
-    for _, parent in ipairs(parents or {}) do
+    expr.parents = parents
+    expr.eval = eval
+    expr.calculateDerivative = derivative
+    expr.format = format
+    for _, parent in ipairs(parents) do
         merge(expr.dependencies, parent.dependencies)
     end
-    expr.parents = parents
     return expr
 end
 
----@param point Point
+---Evaluate the Expression at a given point
+---@param point Point the point at which to evaluate the Expression
+---@return number|Expression result a number if there were no unresolved dependencies, an Expression of said dependencies otherwise
 function M.Expression:evaluate(point)
     if type(point) == "number" then
         local onlyDep, reason = getOnlyDependency(self)
@@ -242,7 +279,13 @@ end
 function M.var(name)
     ---@type Variable
     ---@diagnostic disable-next-line: assign-type-mismatch
-    local v = createBaseExpression(nodeTypes.var, varEval, varDerivative, varFormat)
+    local v = createBaseExpression(
+        nodeTypes.var,
+        varEval,
+        varDerivative,
+        varFormat,
+        {}
+    )
     addDependency(v, v)
     v.name = name
 
@@ -273,29 +316,18 @@ local function constFormat(self)
 end
 
 function M.const(value, name)
-    local c = createBaseExpression(nodeTypes.const, createConstEval(value), constDerivative, constFormat)
+    local c = createBaseExpression(
+        nodeTypes.const,
+        createConstEval(value),
+        constDerivative,
+        constFormat,
+        {}
+    )
     c.name = name
     return c
 end
 zero = M.const(0)
 one = M.const(1)
-
-local function isConstant(expr)
-    return expr.nodeType == nodeTypes.const
-end
-
-local function wrapParentsIfNeeded(expr, parents)
-    local results = {}
-    local ps = priority(expr)
-    for _, p in ipairs(parents) do
-        local s = tostring(p)
-        if priority(p) < ps then
-            s = ("(%s)"):format(s)
-        end
-        table.insert(results, s)
-    end
-    return unpack(results)
-end
 
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
@@ -601,7 +633,7 @@ FuncWrapper__meta.__call = function(self, arg)
     return f
 end
 
----@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format expression
+---@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
 ---@param eval fun(arg: number): number
 ---@param actsOnExpressions boolean?
 ---@return Function
