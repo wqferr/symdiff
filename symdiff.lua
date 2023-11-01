@@ -1,8 +1,6 @@
 --[[
     TODO
     merge consecutive sum / product nodes
-    add proper subtraction and unm nodes
-    fix dependency tracking when taking derivatives
 ]]
 --[[
 Copyright © 2023 William Quelho Ferreira
@@ -270,13 +268,13 @@ Expression__meta.__add = function(a, b)
 end
 
 local function diffEval(self, point)
-    return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
+    return self.parents[1]:evaluate(point) - self.parents[2]:evaluate(point)
 end
 local function diffDerivative(self, withRespectTo)
     if not self.dependencies[withRespectTo] then
         return zero
     end
-    return self.parents[1].derivative[withRespectTo] +
+    return self.parents[1].derivative[withRespectTo] -
         self.parents[2].derivative[withRespectTo]
 end
 local function diffFormat(self)
@@ -319,7 +317,7 @@ Expression__meta.__unm = function(a)
     if type(a) == "number" then
         return M.const(-a)
     end
-    return -1 * a
+    return createBaseExpression(nodeTypes.unm, unmEval, unmDerivative, unmFormat, {a})
 end
 
 local function productEval(self, point)
@@ -417,9 +415,6 @@ local function powerRuleDerivative(self, withRespectTo)
         return zero
     end
     local result = self.parents[2] * self.parents[1] ^ (self.parents[2] - 1)
-    if type(result) ~= "number" then
-        result.dependencies[withRespectTo] = nil
-    end
     return result
 end
 local function constantBasePowerDerivative(self, withRespectTo)
@@ -430,9 +425,6 @@ local function constantBasePowerDerivative(self, withRespectTo)
     local result = math.log(self.parents[1]:evaluate(0)) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2].derivative[withRespectTo]
-    if type(result) ~= "number" then
-        result.dependencies[withRespectTo] = nil
-    end
     return result
 end
 local function generalPowerDerivative(self, withRespectTo)
@@ -446,9 +438,6 @@ local function generalPowerDerivative(self, withRespectTo)
             self.parents[2].derivative[withRespectTo]*M.ln(self.parents[1]) +
             (self.parents[1].derivative[withRespectTo]*self.parents[2]) / self.parents[1]
         )
-    if type(result) ~= "number" then
-        result.dependencies[withRespectTo] = nil
-    end
     return result
 end
 local function powerFormat(self)
