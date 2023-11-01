@@ -20,14 +20,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
---[[
-    TODO auto detect derivatives of functions that act on expressions
-]]
+--- <h2>A module for symbolic differentiation in Lua</h2>
+-- @module symdiff
+-- @alias M
+-- @release 1.0.0
+-- @author William Quelho Ferreira
+-- @copyright 2022
+-- @license MIT
+---
+local M = {}
+M._VERSION = "1.0.0"
+
 
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
-
-local M = {}
 
 
 ---@class Variable: Expression
@@ -43,6 +49,8 @@ local M = {}
 ---@field parents Expression[]
 ---@field derivative DerivativeAccessor
 ---@field cachedFormat string?
+--- An algebraic expression of variables.
+-- @type Expression
 M.Expression = {}
 local Expression__meta = {}
 Expression__meta.__index = M.Expression
@@ -54,6 +62,8 @@ Expression__meta.__index = M.Expression
 ---@field actsOnExpressions boolean?
 ---@field setDerivative fun(self: Function, arg: Function)
 ---@field repr (string|fun(arg: Expression): string)?
+-- A wrapper for mathematical functions.
+-- @type Function
 local FuncWrapper = {}
 local FuncWrapper__meta = {}
 
@@ -68,9 +78,11 @@ local FuncWrapper__meta = {}
 
 local zero, one
 
--- Used for evaluating constants
 ---@type Point
+-- Used for evaluating constants
 local nullPoint = {}
+
+-- @type Variable
 
 
 local function getOnlyDependency(expr)
@@ -86,10 +98,14 @@ end
 
 ---@class DerivativeAccessor: {Variable: Expression}
 ---@field expression Expression
+-- Cached derivative accessor for expressions.
+-- @type DerivativeAccessor
 local DerivativeAccessor__meta = {}
 
 ---@param t DerivativeAccessor
 ---@param k Variable variable with respect to which to differentiate
+-- @tparam DerivativeAccessor t
+-- @tparam Variable k
 DerivativeAccessor__meta.__index = function(t, k)
     if not rawget(t, k) then
         t[k] = t.expression:calculateDerivative(k)
