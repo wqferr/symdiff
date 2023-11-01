@@ -20,8 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
---TODO FIXME what to do about non-"number" constants
-
 --- <h2>A module for symbolic differentiation in Lua</h2>
 -- @module symdiff
 -- @alias M
@@ -36,6 +34,9 @@ M._VERSION = "1.0.0"
 
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
+local isNumeric = function(value)
+    return type(value) == "number"
+end
 
 
 
@@ -259,7 +260,7 @@ end
 ---@param point Point the point at which to evaluate the Expression
 ---@return number|Expression result a number if there were no unresolved dependencies, an Expression of said dependencies otherwise
 function M.Expression:evaluate(point)
-    if type(point) == "number" then
+    if isNumeric(point) then
         local onlyDep, reason = getOnlyDependency(self)
         ---@cast reason string
         if onlyDep then
@@ -362,11 +363,14 @@ local function sumFormat(self)
 end
 
 Expression__meta.__add = function(a, b)
-    if type(a) == "number" then
+    if isNumeric(a) then
         a = M.const(a)
     end
-    if type(b) == "number" then
+    if isNumeric(b) then
         b = M.const(b)
+    end
+    if isConstant(b) then
+        a, b = b, a
     end
     if isConstant(a) then
         if a:evaluate(nullPoint) == 0 then
@@ -374,11 +378,8 @@ Expression__meta.__add = function(a, b)
         elseif isConstant(b) then
             return M.const(a:evaluate(nullPoint) + b:evaluate(nullPoint))
         end
-    elseif isConstant(b) and b:evaluate(nullPoint) == 0 then
-        return a
     end
-    local sum = createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
-    return sum
+    return createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
 end
 
 local function diffEval(self, point)
@@ -392,11 +393,14 @@ local function diffFormat(self)
     return ("%s - %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
 Expression__meta.__sub = function(a, b)
-    if type(a) == "number" then
+    if isNumeric(a) then
         a = M.const(a)
     end
-    if type(b) == "number" then
+    if isNumeric(b) then
         b = M.const(b)
+    end
+    if isConstant(b) then
+        a, b = b, a
     end
     if isConstant(a) then
         if a:evaluate(nullPoint) == 0 then
@@ -404,11 +408,14 @@ Expression__meta.__sub = function(a, b)
         elseif isConstant(b) then
             return M.const(a:evaluate(nullPoint) - b:evaluate(nullPoint))
         end
-    elseif isConstant(b) and b:evaluate(nullPoint) == 0 then
-        return a
     end
-    local diff = createBaseExpression(nodeTypes.diff, diffEval, diffDerivative, diffFormat, {a, b})
-    return diff
+    return createBaseExpression(
+        nodeTypes.diff,
+        diffEval,
+        diffDerivative,
+        diffFormat,
+        {a, b}
+    )
 end
 
 local function unmEval(self, point)
@@ -422,10 +429,16 @@ local function unmFormat(self)
     return ("-%s"):format(tostring(p1))
 end
 Expression__meta.__unm = function(a)
-    if type(a) == "number" then
+    if isNumeric(a) then
         return M.const(-a)
     end
-    return createBaseExpression(nodeTypes.unm, unmEval, unmDerivative, unmFormat, {a})
+    return createBaseExpression(
+        nodeTypes.unm,
+        unmEval,
+        unmDerivative,
+        unmFormat,
+        {a}
+    )
 end
 
 local function productEval(self, point)
@@ -445,36 +458,41 @@ local function productFormat(self)
 end
 local function constProduct(const, expr)
     assert(isConstant(const), "First argument to constProduct must be a Constant")
-    local product = createBaseExpression(nodeTypes.mul, productEval, constProductDerivative, productFormat, {const, expr})
-    return product
+    return createBaseExpression(
+        nodeTypes.mul,
+        productEval,
+        constProductDerivative,
+        productFormat,
+        {const, expr}
+    )
 end
 
 Expression__meta.__mul = function(a, b)
-    if type(b) == "number" then
-        a, b = b, a
-    end
-    if type(a) == "number" then
+    if isNumeric(a) then
         a = M.const(a)
     end
+    if isNumeric(b) then
+        b = M.const(b)
+    end
+    if isConstant(b) then
+        a, b = b, a
+    end
     if isConstant(a) then
-        if a:evaluate(nullPoint) == 0 then
-            return zero
-        elseif isConstant(b) then
-            if b:evaluate(nullPoint) == 0 then
-                return zero
-            else
-                return M.const(a:evaluate(nullPoint) * b:evaluate(nullPoint))
-            end
-        elseif a:evaluate(nullPoint) == 1 then
+        if a:evaluate(nullPoint) == 1 then
             return b
+        elseif isConstant(b) then
+            return M.const(a:evaluate(nullPoint) * b:evaluate(nullPoint))
         else
             return constProduct(a, b)
         end
-    elseif isConstant(b) and b:evaluate(nullPoint) == 1 then
-        return a
     end
-    local product = createBaseExpression(nodeTypes.mul, productEval, productDerivative, productFormat, {a, b})
-    return product
+    return createBaseExpression(
+        nodeTypes.mul,
+        productEval,
+        productDerivative,
+        productFormat,
+        {a, b}
+    )
 end
 
 local function quotientEval(self, point)
@@ -482,17 +500,17 @@ local function quotientEval(self, point)
 end
 local function quotientDerivative(self, withRespectTo)
     local a, b = self.parents[1], self.parents[2]
-    return (a:derivative(withRespectTo) * b - a * b:derivative(withRespectTo)) / (b * b)
+    return (a:derivative(withRespectTo) * b - a * b:derivative(withRespectTo)) / (b^2)
 end
 local function quotientFormat(self)
     local p1, p2 = wrapParentsIfNeeded(self, self.parents)
     return ("%s / %s"):format(p1, p2)
 end
 Expression__meta.__div = function(a, b)
-    if type(a) == "number" then
+    if isNumeric(a) then
         a = M.const(a)
     end
-    if type(b) == "number" then
+    if isNumeric(b) then
         return (1/b) * a
     elseif isConstant(b) then
         if isConstant(a) then
@@ -501,8 +519,13 @@ Expression__meta.__div = function(a, b)
             return (1/b:evaluate(nullPoint)) * a
         end
     end
-    local quotient = createBaseExpression(nodeTypes.div, quotientEval, quotientDerivative, quotientFormat, {a, b})
-    return quotient
+    return createBaseExpression(
+        nodeTypes.div,
+        quotientEval,
+        quotientDerivative,
+        quotientFormat,
+        {a, b}
+    )
 end
 
 local function powerEval(self, point)
@@ -535,10 +558,10 @@ local function powerFormat(self)
     return ("%s^%s"):format(p1, p2)
 end
 Expression__meta.__pow = function(a, b)
-    if type(a) == "number" then
+    if isNumeric(a) then
         a = M.const(a)
     end
-    if type(b) == "number" then
+    if isNumeric(b) then
         b = M.const(b)
     end
     local calculateDerivative
@@ -557,8 +580,13 @@ Expression__meta.__pow = function(a, b)
     else
         calculateDerivative = generalPowerDerivative
     end
-    local power = createBaseExpression(nodeTypes.pow, powerEval, calculateDerivative, powerFormat, {a, b})
-    return power
+    return createBaseExpression(
+        nodeTypes.pow,
+        powerEval,
+        calculateDerivative,
+        powerFormat,
+        {a, b}
+    )
 end
 
 local function funcEval(self, point)
@@ -566,7 +594,7 @@ local function funcEval(self, point)
         return self.func(self.parents[1]):evaluate(point)
     else
         local arg = self.parents[1]:evaluate(point)
-        if type(arg) == "number" then
+        if isNumeric(arg) then
             return self.func(arg)
         else
             return self.funcWrapper(arg)
@@ -592,7 +620,7 @@ local function funcFormat(self)
     elseif self.actsOnExpressions then
         return tostring(self.func(self.parents[1]))
     else
-        error("Function passed nil to repr argument without specifying actsOnExpressions")
+        error("Function passed nil to repr argument without specifying actsOnExpressions: cannot be displayed")
     end
 end
 
@@ -606,7 +634,7 @@ end
 FuncWrapper__meta.__index = FuncWrapper
 
 FuncWrapper__meta.__call = function(self, arg)
-    if type(arg) == "number" then
+    if isNumeric(arg) then
         arg = M.const(arg)
     end
     ---@type FunctionCall
@@ -620,7 +648,6 @@ FuncWrapper__meta.__call = function(self, arg)
     return f
 end
 
---TODO FIXME order of args was changed!
 ---@param eval fun(arg: number): number
 ---@param actsOnExpressions boolean?
 ---@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
@@ -636,6 +663,12 @@ end
 ---@param deriv Function
 function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
+end
+
+---Changes the function that checks whether a value is numeric
+---@param newCheck fun(value: any): boolean new function to be used in those checks
+M.setNumericCheck = function(newCheck)
+    isNumeric = newCheck
 end
 
 M.identity = M.func(function(x) return x end, true)
