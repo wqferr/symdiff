@@ -153,15 +153,12 @@ and relating them to one another outside the library.
 
 ## Usage with different numeric systems
 This module supports different numeric systems than that of Lua.
-For that, it exposes 3 functions that can be replaced as the user wishes:
-- `isNumeric` (`function(value: any): boolean`)
-- `isZero` (`function(value: Number): boolean`)
-- `symdiff.ln` (`symdiff.func`)
+For that, it exposes 2 functions that can be replaced as the user wishes:
+- `isNumeric` (type `function(value: any): boolean`)
+- `symdiff.ln` (type `symdiff.func`)
 
-Where "Number" denotes your custom numeric type. One or both of
-`isNumeric` and `isZero` can be set by calling
-`symdiff.setNumericChecks`. If the corresponding argument
-is `nil`, that function is not updated.
+Where "Number" denotes your custom numeric type. `isNumeric` can be set by calling `symdiff.setNumericCheck`.
+This is useful when trying to use the library in conjunction with a complex number library, for example.
 
 `symdiff.ln`, however, is different: its value must be a set to a Function wrapper returned by `symdiff.func`. For example, this is the default implementation:
 
@@ -172,3 +169,5 @@ symdiff.ln:setDerivative(symdiff.reciproc)
 ```
 
 `symdiff.ln` is important because it's used when computing derivatives of the form `f(x)^g(x)`.
+
+Any of the other provided `symdiff.func`s can be overriden in this way, if one so chooses.
