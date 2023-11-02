@@ -21,6 +21,19 @@ THE SOFTWARE.
 ]]
 
 --- <h2>A module for symbolic differentiation in Lua</h2>
+-- <p>This module supports different numeric systems than that of Lua. For that,
+-- it exposes 3 functions that can be replaced as the user wishes:</p>
+-- <ul>
+-- <li> isNumeric (function(value: any): boolean) </li>
+-- <li> isZero (function(value: Number): boolean) </li>
+-- <li> symdiff.ln (Function(value: Number): Number) </li>
+-- </ul>
+-- <p>Where "Number" denotes your custom numeric type. One or both of
+-- <code>isNumeric</code> and <code>isZero</code> can be set by calling
+-- <code>symdiff.setNumericChecks</code>. If the corresponding argument
+-- is <code>nil</code>, that function is not updated.</p>
+-- <p><code>symdiff.ln</code>, however, is different: its value must be a set to
+-- a Function wrapper returned by <code>symdiff.func</code>.</p>
 -- @module symdiff
 -- @alias M
 -- @release 1.0.0
@@ -331,7 +344,7 @@ local function constFormat(self)
     if self.name then
         return self.name
     else
-        return ("%f"):format(self:evaluate())
+        return tostring(self:evaluate())
     end
 end
 
@@ -398,9 +411,6 @@ Expression__meta.__sub = function(a, b)
     if isNumeric(b) then
         b = M.const(b)
     end
-    if isConstant(b) then
-        a, b = b, a
-    end
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
         if isZero(aEval) then
@@ -408,6 +418,8 @@ Expression__meta.__sub = function(a, b)
         elseif isConstant(b) then
             return M.const(aEval - b:evaluate(nullPoint))
         end
+    elseif isConstant(b) and isZero(b:evaluate(nullPoint)) then
+        return a
     end
     return createBaseExpression(
         nodeTypes.diff,
@@ -483,6 +495,8 @@ Expression__meta.__mul = function(a, b)
             return b
         elseif isConstant(b) then
             return M.const(aEval * b:evaluate(nullPoint))
+        elseif isZero(aEval) then
+            return zero
         else
             return constProduct(a, b)
         end

@@ -1,9 +1,13 @@
-local sd = require "symdiff"
+local sd = require("symdiff")
+local x = sd.var("x")
+local y = sd.var("y")
+local poly = 4*x^2 + 3*y^3 - 2*x*y
+local temp = poly:evaluate{[x] = 2}  -- substitutes 2 in place of x, we get a new expression
+print(temp)  -- prints "16 + 3*y^3 - 4*y"
+print(temp:evaluate(-1))  -- now that we're back to a single variable,
 
-local z = sd.var "z"
-local expr = sd.ln(z + z^2)
-print(expr:derivative())
-print(expr:derivative(z))
-print(expr:derivative(3))
-print(expr:derivative(z):evaluate(3))
-print(expr:derivative(z):evaluate{[z] = 3})
+print(poly:derivative(x))
+print(poly:derivative(y))  -- derivative with respect to y, prints
+local ddx = poly:derivative(x)  -- previous result was cached, no worries about performance
+local ddx_ddy = ddx:derivative(y)
+print(ddx_ddy)
