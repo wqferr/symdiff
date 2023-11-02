@@ -669,13 +669,13 @@ FuncWrapper__meta.__call = function(self, arg)
 end
 
 ---@param eval fun(arg: number): number
----@param actsOnExpressions boolean?
+---@param numeric boolean?
 ---@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
 ---@return Function
-function M.func(eval, actsOnExpressions, repr)
+function M.func(eval, numeric, repr)
     local wrapper = setmetatable({}, FuncWrapper__meta)
     wrapper.func = eval
-    wrapper.actsOnExpressions = actsOnExpressions
+    wrapper.actsOnExpressions = not numeric
     wrapper.repr = repr
     return wrapper
 end
@@ -697,40 +697,37 @@ M.setNumericChecks = function(newIsNumeric, newIsZero)
     end
 end
 
-M.identity = M.func(function(x) return x end, true)
-M.reciproc = M.func(function(x) return 1/x end, true)
+M.identity = M.func(function(x) return x end)
+M.reciproc = M.func(function(x) return 1/x end)
 
-M.sqrt = M.func(function(x) return math.sqrt(x) end, false, "sqrt")
-local sqrtDeriv = M.func(
-    function(x) return 1/(2*M.sqrt(x)) end,
-    true
-)
+M.sqrt = M.func(function(x) return math.sqrt(x) end, true, "sqrt")
+local sqrtDeriv = M.func(function(x) return 1/(2*M.sqrt(x)) end)
 M.sqrt:setDerivative(sqrtDeriv)
 
-M.ln = M.func(math.log, false, "ln")
+M.ln = M.func(math.log, true, "ln")
 M.ln:setDerivative(M.reciproc)
 
-M.exp = M.func(math.exp, false, "exp")
+M.exp = M.func(math.exp, true, "exp")
 M.exp:setDerivative(M.exp)
 
 local sinhF = function(x) return (M.exp(x) - M.exp(-x)) / 2 end
-M.sinh = M.func(sinhF, true, "sinh")
+M.sinh = M.func(sinhF, false, "sinh")
 local coshF = function(x) return (M.exp(x) + M.exp(-x) / 2) end
-M.cosh = M.func(coshF, true, "cosh")
+M.cosh = M.func(coshF, false, "cosh")
 local tanhF = function(x) return (M.exp(2*x) - 1) / (M.exp(2*x) + 1) end
-M.tanh = M.func(tanhF, true, "tanh")
+M.tanh = M.func(tanhF, false, "tanh")
 local tanhDeriv = M.func(function(x) return 1/M.cosh(x)^2 end, true)
 M.tanh:setDerivative(tanhDeriv)
 
 M.sinh:setDerivative(M.cosh)
 M.cosh:setDerivative(M.sinh)
 
-M.sin = M.func(math.sin, false, "sin")
-M.cos = M.func(math.cos, false, "cos")
-M.tan = M.func(math.tan, false, "tan")
-local msin = M.func(function(x) return -M.sin(x) end, true)
-local mcos = M.func(function(x) return -M.cos(x) end, true)
-local sec2inv = M.func(function(x) return 1/(M.cos(x))^2 end, true)
+M.sin = M.func(math.sin, true, "sin")
+M.cos = M.func(math.cos, true, "cos")
+M.tan = M.func(math.tan, true, "tan")
+local msin = M.func(function(x) return -M.sin(x) end)
+local mcos = M.func(function(x) return -M.cos(x) end)
+local sec2inv = M.func(function(x) return 1/(M.cos(x))^2 end)
 
 M.sin:setDerivative(M.cos)
 M.cos:setDerivative(msin)
