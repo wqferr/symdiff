@@ -85,27 +85,27 @@ Expression__meta.__index = M.Expression
 
 ---@class Function
 ---@operator call(AlgebraicTerm): Expression
----@field name string
----@field func fun(arg: number): number
----@field funcDerivative Function
----@field actsOnExpressions boolean?
----@field setDerivative fun(self: Function, arg: Function)
----@field repr (string|fun(arg: Expression): string)?
+---@field package func WrappedFunction
+---@field package funcDerivative Function
+---@field package actsOnExpressions boolean?
+---@field package repr (string|fun(arg: Expression): string)?
 local FuncWrapper = {}
 local FuncWrapper__meta = {}
 
 ---@class FunctionCall: Expression
----@field repr (string|fun(arg: Expression): string)?
----@field funcWrapper table?
----@field func fun(arg: number): number
----@field funcDerivative Function
----@field actsOnExpressions boolean?
+---@field package repr (string|fun(arg: Expression): string)?
+---@field package funcWrapper table?
+---@field package func fun(arg: number): number
+---@field package funcDerivative Function
+---@field package actsOnExpressions boolean?
 
 ---@alias Point
 ---|{Variable: number} a mapping for the value of each variable at the point
 ---|number the value of the single variable of the Expression
 
 ---@alias AlgebraicTerm Variable|Expression|number
+
+---@alias WrappedFunction (fun(arg: number): number|fun(arg: Expression): Expression)
 
 local zero, one
 
@@ -668,9 +668,9 @@ FuncWrapper__meta.__call = function(self, arg)
     return f
 end
 
----@param eval fun(arg: number): number
----@param numeric boolean?
----@param repr (string|fun(Expression): string)? if nil and actsOnExpressions, evaluates it for the format Expression
+---@param eval WrappedFunction the function to wrap
+---@param numeric boolean? whether the function deals with numbers (true) or Expressions (false, default)
+---@param repr (string|fun(Expression): string)? name or formatting function for this Function
 ---@return Function
 function M.func(eval, numeric, repr)
     local wrapper = setmetatable({}, FuncWrapper__meta)
@@ -680,7 +680,9 @@ function M.func(eval, numeric, repr)
     return wrapper
 end
 
----@param deriv Function
+---Set the derivative calculating Function for this Function.
+---This is recommended only for Functions flagged as numeric.
+---@param deriv Function the function whose evaluation equals self's derivative
 function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
 end
