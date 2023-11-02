@@ -170,3 +170,5 @@ symdiff.ln = symdiff.func(math.log, true, "ln")
 symdiff.reciproc = M.func(function(x) return 1/x end, true)
 symdiff.ln:setDerivative(symdiff.reciproc)
 ```
+
+`symdiff.ln` is important because it's used when computing derivatives of the form `f(x)^g(x)`.
