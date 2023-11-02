@@ -158,7 +158,7 @@ For that, it exposes 2 functions that can be replaced as the user wishes:
 - `symdiff.ln` (type `symdiff.func`)
 
 Where "Number" denotes your custom numeric type. `isNumeric` can be set by calling `symdiff.setNumericCheck`.
-This is useful when trying to use the library in conjunction with a complex number library, for example.
+This is useful when trying to use the library in conjunction with a complex number library, or for accepting vectorized inputs, for example.
 
 `symdiff.ln`, however, is different: its value must be a set to a Function wrapper returned by `symdiff.func`. For example, this is the default implementation:
 
