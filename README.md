@@ -164,7 +164,7 @@ This is useful when trying to use the library in conjunction with a complex numb
 
 ```lua
 symdiff.ln = symdiff.func(math.log, true, "ln")
-symdiff.reciproc = M.func(function(x) return 1/x end, true)
+symdiff.reciproc = M.func(function(x) return 1/x end)
 symdiff.ln:setDerivative(symdiff.reciproc)
 ```
 
