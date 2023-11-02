@@ -2,7 +2,7 @@
 A module for symbolic differentiation in Lua.
 
 ## General usage
-SymDiff is designed to be used by creating Variables and manipulating them via algebra or (wrapped) function calls. This allows the system to build an internal model of whatever function you intend to calculate, which in turn lets SymDiff create an expression that symbolically matches the original's derivative.
+SymDiff is designed to be used by creating variables and manipulating them via algebra or (wrapped) function calls. This allows the system to build an internal model of whatever function you intend to calculate, which in turn lets SymDiff create an expression that symbolically matches the original's derivative.
 
 For example, take this simple example:
 
@@ -30,18 +30,21 @@ local poly = 4*x^2 + 3*y^3 - 2*x*y
 -- print(poly:evaluate(3))  -- wrong! with multiple variables, this shortcut errors!
 
 -- notice the curly braces in the following lines!
-local temp = poly:evaluate{[x] = 2}  -- substitutes 2 in place of x, we get a new expression
+local temp = poly:evaluate {[x] = 2}  -- substitutes 2 in place of x, we get a new expression
 print(temp)  -- prints "16 + 3*y^3 - 4*y"
+print()
 
 print(temp:evaluate(-1))  -- now that we're back to a single variable,
                           -- we can use the shortcut again. prints "17"
 
 print(temp:evaluate {[y] = -1})  -- or we can always go back to the explicit notation
-
 print(poly:evaluate {[x] = 2, [y] = -1})  -- prints "17" from poly in a single :evaluate call
+print()
 
 print(poly:derivative(x))  -- derivative with respect to x, prints "4*2*x - 2*y"
 print(poly:derivative(y))  -- derivative with respect to y, prints "3*3*y^2 - 2*x"
+print()
+
 -- print(poly:derivative(x, y))  -- wrong!
 local ddx = poly:derivative(x)  -- previous result was cached, no worries about performance
 local ddx_ddy = ddx:derivative(y)
@@ -55,15 +58,15 @@ compatible.
 
 ## Mathematical functions and how to implement your own
 Currently, only a handful of functions are implemented ready for use:
-- <code>identity</code>: f(x) = 0
-- <code>reciproc</code>: f(x) = 1/x
-- <code>sqrt</code> (square root): f(x) = √x
-- <code>ln</code> (natural log): f(x) = log_e(x)
-- <code>exp</code> (exponential): f(x) = e^x
-- <code>sin</code>, <code>cos</code>, <code>tan</code> (trigonometric functions)
-- <code>sinh</code>, <code>cosh</code>, <code>tanh</code> (hyperbolic trigonometric functions)
+- `identity`: f(x) = 0
+- `reciproc`: f(x) = 1/x
+- `sqrt` (square root): f(x) = √x
+- `ln` (natural log): f(x) = log_e(x)
+- `exp` (exponential): f(x) = e^x
+- `sin`, `cos`, `tan` (trigonometric functions)
+- `sinh`, `cosh`, `tanh` (hyperbolic trigonometric functions)
 
-But more importantly, the interface to create your own is available via <code>symdiff.func</code>. The first argument is the function being wrapped. It can be either a <code>function(Expression): Expression</code> (case I) or a <code>function(number): number</code> (case II). Expressions are any combination of <code>symdiff.func</code> and algebraic operators operating on variables and their composites. Essentially, if all your function does is manipulate a value algebrically, such as the reciprocal function, you have a case I function.
+But more importantly, the interface to create your own is available via `symdiff.func`. The first argument is the function being wrapped. It can be either a `function(Expression): Expression` (case I) or a `function(number): number` (case II). Expressions are any combination of `symdiff.func` and algebraic operators acting on variables and their composites. Essentially, if all your function does is manipulate a value algebrically, such as the reciprocal function, you have a case I function.
 
 Case I functions are much nicer to work with, since SymDiff can infer most of the information about them, like how to differentiate them and how to display them.
 For example, the reciprocal function can be defined as follows:
@@ -76,7 +79,15 @@ local reciproc = symdiff.func(
 )
 ```
 
-Case II functions are usually mathematical library operations, such as <code>ln</code>. You can't define it algebraically, so there's no way to define a case I style function for it. Our only hope is a case II: wrapping a <code>function(number): number</code>. Let's look at an example:
+Now you can use `reciproc` with your variables. For example:
+
+```lua
+local z = symdiff.var("z")
+local expr = 3 * reciproc(2*z^2)
+print(expr)  --> prints "3 * 1/(2*z^2)"
+```
+
+Case II functions are usually mathematical library operations, such as `ln`. You can't define it algebraically, so there's no way to define a case I style function for it. Our only hope is a case II: wrapping a `function(number): number`. Let's look at an example:
 
 ```lua
 local reciproc = symdiff.func(
@@ -92,10 +103,10 @@ local ln = symdiff.func(
 ln:setDerivative(reciproc)
 ```
 
-Here we have 2 new pieces of information: the <code>repr</code> argument (usually the function name), and the <code>:setDerivative</code> call. Since SymDiff has no information on how the function is evaluated, we can provide the derivative in the shape of another <code>symdiff.func</code>. Note that this step is optional only if you don't take any derivatives
-of your new <code>syndiff.func</code> (directly or indirectly, via the chain rule).
+Here we have 2 new pieces of information: the `repr` argument (usually the function name), and the `:setDerivative` call. Since SymDiff has no information on how the function is evaluated, we can provide the derivative in the shape of another `symdiff.func`. Note that this step is optional only if you don't take any derivatives
+of your new `syndiff.func` (directly or indirectly, via the chain rule).
 
-The third argument, <code>repr</code>, can be either a string, or a <code>function(Expression): string</code>. In the second case, it will be called with the function's argument every time it needs to be displayed. For example, if you wanted <code>exp</code> to show as <code>e^(x)</code>, you could do:
+The third argument, `repr`, can be either a string, or a `function(Expression): string`. In the second case, it will be called with the function's argument every time it needs to be displayed. For example, if you wanted `exp` to show as `e^(x)`, you could do:
 
 ```lua
 local exp = symdiff.func(
@@ -109,7 +120,28 @@ local exp = symdiff.func(
 )
 ```
 
-Here, <code>tostring</code> does all the heavy lifting for parsing the expression tree. All the <code>repr</code> function needs to do in this case is a simple <code>string.format</code>.
+Here, `tostring` does all the heavy lifting for parsing the expression tree. All the `repr` function needs to do in this case is a simple `string.format`.
+
+### Composing `symdiff.func`s
+You can compose case I functions in any way you want. For example, with `symdiff.exp` we can define `sinh` and `cosh` as follows:
+
+```lua
+local sinh = symdiff.func(
+    function(x)
+        return (symdiff.exp(x) - symdiff.exp(-x)) / 2
+    end
+)
+local cosh = symdiff.func(
+    function(x)
+        return (symdiff.exp(x) + symdiff.exp(-x)) / 2
+    end
+)
+
+-- sinh:setDerivative(cosh)  --> optional! since they're case I functions,
+-- cosh:setDerivative(sinh)      SymDiff can deduce the derivatives; however
+--                               setting them will save some steps when computing
+--                               them for the first time
+```
 
 ## Limitations
 SymDiff is not designed to be performant, although some naïve attempts at
@@ -122,16 +154,16 @@ and relating them to one another outside the library.
 ## Usage with different numeric systems
 This module supports different numeric systems than that of Lua.
 For that, it exposes 3 functions that can be replaced as the user wishes:
-- <code>isNumeric</code> (<code>function(value: any): boolean</code>)
-- <code>isZero</code> (<code>function(value: Number): boolean</code>)
-- <code>symdiff.ln</code> (<code>symdiff.func</code>)
+- `isNumeric` (`function(value: any): boolean`)
+- `isZero` (`function(value: Number): boolean`)
+- `symdiff.ln` (`symdiff.func`)
 
 Where "Number" denotes your custom numeric type. One or both of
-<code>isNumeric</code> and <code>isZero</code> can be set by calling
-<code>symdiff.setNumericChecks</code>. If the corresponding argument
-is <code>nil</code>, that function is not updated.
+`isNumeric` and `isZero` can be set by calling
+`symdiff.setNumericChecks`. If the corresponding argument
+is `nil`, that function is not updated.
 
-<code>symdiff.ln</code>, however, is different: its value must be a set to a Function wrapper returned by <code>symdiff.func</code>. For example, this is the default implementation:
+`symdiff.ln`, however, is different: its value must be a set to a Function wrapper returned by `symdiff.func`. For example, this is the default implementation:
 
 ```lua
 symdiff.ln = symdiff.func(math.log, true, "ln")

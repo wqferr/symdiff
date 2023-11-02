@@ -293,6 +293,7 @@ end
 ---@param name string the name of the variable
 ---@return Variable
 function M.var(name)
+    assert(type(name) == "string", "Variables must have a name")
     ---@type Variable
     ---@diagnostic disable-next-line: assign-type-mismatch
     local v = createBaseExpression(
