@@ -20,41 +20,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
---- <h2>A module for symbolic differentiation in Lua</h2>
--- <p>This module supports different numeric systems than that of Lua. For that,
--- it exposes 3 functions that can be replaced as the user wishes:</p>
--- <ul>
--- <li> isNumeric (function(value: any): boolean) </li>
--- <li> isZero (function(value: Number): boolean) </li>
--- <li> symdiff.ln (Function(value: Number): Number) </li>
--- </ul>
--- <p>Where "Number" denotes your custom numeric type. One or both of
--- <code>isNumeric</code> and <code>isZero</code> can be set by calling
--- <code>symdiff.setNumericChecks</code>. If the corresponding argument
--- is <code>nil</code>, that function is not updated.</p>
--- <p><code>symdiff.ln</code>, however, is different: its value must be a set to
--- a Function wrapper returned by <code>symdiff.func</code>.</p>
--- @module symdiff
--- @alias M
--- @release 1.0.0
--- @author William Quelho Ferreira
--- @copyright 2022
--- @license MIT
----
 local M = {}
 M._VERSION = "1.0.0"
 
 
 ---@diagnostic disable-next-line: deprecated
 local unpack = unpack or table.unpack
+
 local isNumeric = function(value)
     return type(value) == "number"
 end
 local isZero = function(value)
     return value == 0
 end
-
-
 
 ---@class Expression
 ---@operator add(AlgebraicTerm): Expression
@@ -557,7 +535,6 @@ end
 local function constantBasePowerDerivative(self, withRespectTo)
     assert(isConstant(self.parents[1]), "Constant base power derivative requires constant base")
     local point = self.parents[1]:evaluate(nullPoint)
-    assert(point > 0, "Cannot differentiate exponentials with negative bases")
     local result = math.log(point) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2]:derivative(withRespectTo)
