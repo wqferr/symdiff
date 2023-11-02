@@ -666,7 +666,7 @@ function FuncWrapper:setDerivative(deriv)
 end
 
 ---Changes core functions relating to numeric types
----@param newIsNumeric fun(value: any): boolean new function to differentiate number values
+---@param newIsNumeric fun(value: any): boolean new function to distinguish number values
 ---@param newIsZero fun(value: number): boolean new function to detect a zero value
 M.setNumericChecks = function(newIsNumeric, newIsZero)
     if newIsNumeric then
