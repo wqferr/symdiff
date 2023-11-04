@@ -21,7 +21,7 @@ THE SOFTWARE.
 ]]
 
 local M = {}
-M._VERSION = "1.0.0"
+M._VERSION = "1.0.1"
 
 
 ---@diagnostic disable-next-line: deprecated
@@ -30,6 +30,8 @@ local unpack = unpack or table.unpack
 local isNumeric = function(value)
     return type(value) == "number"
 end
+
+local add, diff, mul, div, pow
 
 ---@class Expression
 ---@operator add(AlgebraicTerm): Expression
@@ -324,6 +326,10 @@ local function constFormat(self)
     end
 end
 
+---Wrap a constant value for use in SymDiff
+---@param value any
+---@param name string? name of the constant
+---@return Expression
 function M.const(value, name)
     local c = createBaseExpression(
         nodeTypes.const,
@@ -349,7 +355,7 @@ local function sumFormat(self)
     return ("%s + %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
 
-Expression__meta.__add = function(a, b)
+function add(a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -370,6 +376,9 @@ Expression__meta.__add = function(a, b)
     end
     return createBaseExpression(nodeTypes.sum, sumEval, sumDerivative, sumFormat, {a, b})
 end
+Expression__meta.__add = function(a, b)
+    return add(a, b)
+end
 
 local function diffEval(self, point)
     return self.parents[1]:evaluate(point) - self.parents[2]:evaluate(point)
@@ -381,7 +390,7 @@ end
 local function diffFormat(self)
     return ("%s - %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
-Expression__meta.__sub = function(a, b)
+function diff(a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -397,9 +406,7 @@ Expression__meta.__sub = function(a, b)
             return M.const(aEval - b:evaluate(nullPoint))
         end
     else
-        local bEval = b:evaluate(nullPoint)
-        ---@cast bEval number
-        if isConstant(b) and bEval == 0 then
+        if isConstant(b) and b:evaluate(nullPoint) == 0 then
             return a
         end
     end
@@ -410,6 +417,9 @@ Expression__meta.__sub = function(a, b)
         diffFormat,
         {a, b}
     )
+end
+Expression__meta.__sub = function(a, b)
+    return diff(a, b)
 end
 
 local function unmEval(self, point)
@@ -439,8 +449,7 @@ local function productEval(self, point)
     return self.parents[1]:evaluate(point) * self.parents[2]:evaluate(point)
 end
 local function constProductDerivative(self, withRespectTo)
-    return self.parents[1]:evaluate(nullPoint) *
-        self.parents[2]:derivative(withRespectTo)
+    return self.parents[1] * self.parents[2]:derivative(withRespectTo)
 end
 local function productDerivative(self, withRespectTo)
     local p1, p2 = self.parents[1], self.parents[2]
@@ -460,8 +469,7 @@ local function constProduct(const, expr)
         {const, expr}
     )
 end
-
-Expression__meta.__mul = function(a, b)
+function mul(a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -491,6 +499,9 @@ Expression__meta.__mul = function(a, b)
         {a, b}
     )
 end
+Expression__meta.__mul = function(a, b)
+    return mul(a, b)
+end
 
 local function quotientEval(self, point)
     return self.parents[1]:evaluate(point) / self.parents[2]:evaluate(point)
@@ -503,7 +514,7 @@ local function quotientFormat(self)
     local p1, p2 = wrapParentsIfNeeded(self, self.parents)
     return ("%s / %s"):format(p1, p2)
 end
-Expression__meta.__div = function(a, b)
+function div(a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -527,13 +538,16 @@ Expression__meta.__div = function(a, b)
         {a, b}
     )
 end
+Expression__meta.__div = function(a, b)
+    return div(a, b)
+end
 
 local function powerEval(self, point)
     return self.parents[1]:evaluate(point) ^ self.parents[2]:evaluate(point)
 end
 local function powerRuleDerivative(self, withRespectTo)
     assert(isConstant(self.parents[2]), "Power rule only works for constant exponents")
-    local result = self.parents[2] * self.parents[1] ^ (self.parents[2] - 1)
+    local result = self.parents[2] * self.parents[1] ^ (self.parents[2] - 1) * self.parents[1]:derivative(withRespectTo)
     return result
 end
 local function constantBasePowerDerivative(self, withRespectTo)
@@ -558,7 +572,7 @@ local function powerFormat(self)
     local p1, p2 = wrapParentsIfNeeded(self, self.parents)
     return ("%s^%s"):format(p1, p2)
 end
-Expression__meta.__pow = function(a, b)
+function pow(a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -588,6 +602,9 @@ Expression__meta.__pow = function(a, b)
         powerFormat,
         {a, b}
     )
+end
+Expression__meta.__pow = function(a, b)
+    return pow(a, b)
 end
 
 local function funcEval(self, point)

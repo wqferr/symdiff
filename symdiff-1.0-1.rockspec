@@ -1,8 +1,8 @@
 package = "symdiff"
-version = "1.0-0"
+version = "1.0-1"
 source = {
   url = "https://github.com/wqferr/symdiff",
-  tag = "v1.0.0"
+  tag = "v1.0.1"
 }
 
 description = {
