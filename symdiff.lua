@@ -552,8 +552,7 @@ local function powerRuleDerivative(self, withRespectTo)
 end
 local function constantBasePowerDerivative(self, withRespectTo)
     assert(isConstant(self.parents[1]), "Constant base power derivative requires constant base")
-    local point = self.parents[1]:evaluate(nullPoint)
-    local result = math.log(point) *
+    local result = M.ln(self.parents[1]) *
         (self.parents[1]^self.parents[2]) *
         self.parents[2]:derivative(withRespectTo)
     return result
