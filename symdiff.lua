@@ -21,7 +21,7 @@ THE SOFTWARE.
 ]]
 
 local M = {}
-M._VERSION = "1.0.1"
+M._VERSION = "1.0.2"
 
 
 ---@diagnostic disable-next-line: deprecated
