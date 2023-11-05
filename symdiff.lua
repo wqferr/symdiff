@@ -20,8 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]
 
+-- TODO make sum and product nodes support more than 2 parents
 local M = {}
-M._VERSION = "1.0.2"
+M._VERSION = "1.0.3"
 
 
 ---@diagnostic disable-next-line: deprecated
@@ -29,6 +30,14 @@ local unpack = unpack or table.unpack
 
 local isNumeric = function(value)
     return type(value) == "number"
+end
+
+local isZero = function(value)
+    return value == 0
+end
+
+local isOne = function(value)
+    return value == 1
 end
 
 local add, diff, mul, div, pow
@@ -78,7 +87,7 @@ local FuncWrapper__meta = {}
 
 ---@alias Point
 ---|{Variable: number} a mapping for the value of each variable at the point
----|number the value of the single variable of the Expression
+---|number the value of the single Variable of the Expression
 
 ---@alias AlgebraicTerm Variable|Expression|number
 
@@ -322,7 +331,7 @@ local function constFormat(self)
     if self.name then
         return self.name
     else
-        return tostring(self:evaluate())
+        return tostring(self:evaluate(nullPoint))
     end
 end
 
@@ -368,7 +377,7 @@ function add(a, b)
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
         ---@cast aEval number
-        if aEval == 0 then
+        if isZero(aEval) then
             return b
         elseif isConstant(b) then
             return M.const(aEval + b:evaluate(nullPoint))
@@ -400,13 +409,13 @@ function diff(a, b)
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
         ---@cast aEval number
-        if aEval == 0 then
+        if isZero(aEval) then
             return -b
         elseif isConstant(b) then
             return M.const(aEval - b:evaluate(nullPoint))
         end
     else
-        if isConstant(b) and b:evaluate(nullPoint) == 0 then
+        if isConstant(b) and isZero(b:evaluate(nullPoint)) then
             return a
         end
     end
@@ -481,11 +490,11 @@ function mul(a, b)
     end
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
-        if aEval == 1 then
+        if isOne(aEval) then
             return b
         elseif isConstant(b) then
             return M.const(aEval * b:evaluate(nullPoint))
-        elseif aEval == 0 then
+        elseif isZero(aEval) then
             return zero
         else
             return constProduct(a, b)
@@ -519,11 +528,11 @@ function div(a, b)
         a = M.const(a)
     end
     if isNumeric(b) then
-        assert(b ~= 0, "Division by 0")
+        assert(not isZero(b), "Division by 0")
         return (1/b) * a
     elseif isConstant(b) then
         local bEval = b:evaluate(nullPoint)
-        assert(bEval ~= 0, "Division by 0")
+        assert(not isZero(bEval), "Division by 0")
         if isConstant(a) then
             return M.const(a:evaluate(nullPoint) / bEval)
         else
@@ -580,14 +589,14 @@ function pow(a, b)
     end
     local calculateDerivative
     if isConstant(b) then
-        if b:evaluate(nullPoint) == 0 then
+        if isZero(b:evaluate(nullPoint)) then
             return one
-        elseif b:evaluate(nullPoint) == 1 then
+        elseif isOne(b:evaluate(nullPoint)) then
             return a
         end
         calculateDerivative = powerRuleDerivative
     elseif isConstant(a) then
-        if a:evaluate(nullPoint) == 0 then
+        if isZero(a:evaluate(nullPoint)) then
             return zero
         end
         calculateDerivative = constantBasePowerDerivative
@@ -684,12 +693,17 @@ function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
 end
 
----Changes core function for distinguishing numeric values.
+---Changes core functions for distinguishing numeric values.
 ---This is intended to be used, for examplel, to support complex numbers.
----@param newIsNumeric fun(value: any): boolean new function to distinguish number values
-M.setNumericCheck = function(newIsNumeric)
-    if newIsNumeric then
-        isNumeric = newIsNumeric
+--@param funcs {string: fun(value: any): boolean} new functions to replace the old ones
+M.setNumericChecks = function(funcs)
+    isNumeric = funcs["isNumeric"] or isNumeric
+    isZero = funcs["isZero"] or isZero
+    isOne = funcs["isOne"] or isOne
+    funcs["isNumeric"], funcs["isZero"], funcs["isOne"] = nil, nil, nil
+    local n = next(funcs)
+    if n then
+        error("Unknown key in funcs table: "..n)
     end
 end
 
