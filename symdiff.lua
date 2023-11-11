@@ -21,8 +21,9 @@ THE SOFTWARE.
 ]]
 
 -- TODO make sum and product nodes support more than 2 parents
+---@module "symdiff"
 local M = {}
-M._VERSION = "1.0.3"
+M._VERSION = "1.0.4"
 
 
 ---@diagnostic disable-next-line: deprecated
@@ -71,7 +72,7 @@ Expression__meta.__index = M.Expression
 
 ---@class Function
 ---@operator call(AlgebraicTerm): Expression
----@field package func WrappedFunction
+---@field public func WrappedFunction
 ---@field package funcDerivative Function
 ---@field package actsOnExpressions boolean?
 ---@field package repr (string|fun(arg: Expression): string)?
