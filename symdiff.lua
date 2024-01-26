@@ -211,10 +211,22 @@ local function merge(onto, new)
     end
 end
 
+local function errorIfAnyIsNull(n, ...)
+    local args = {...}
+    for idx = 1, n do
+        if args[idx] == nil then
+            error("Expected non-nil value for operand #"..idx, 3)
+        end
+    end
+end
+
 ---Check whether expr is a constant node or not
 ---@param expr Expression the expression to check
 ---@return boolean const true if and only if expr is a constant node
 local function isConstant(expr)
+    if expr == nil then
+        error("Unexpected nil value", 2)
+    end
     return expr.nodeType == nodeTypes.const
 end
 
@@ -366,6 +378,7 @@ local function sumFormat(self)
 end
 
 function add(a, b)
+    errorIfAnyIsNull(2, a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -401,6 +414,7 @@ local function diffFormat(self)
     return ("%s - %s"):format(tostring(self.parents[1]), tostring(self.parents[2]))
 end
 function diff(a, b)
+    errorIfAnyIsNull(2, a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -480,6 +494,9 @@ local function constProduct(const, expr)
     )
 end
 function mul(a, b)
+    errorIfAnyIsNull(2, a, b)
+    print(a, b)
+    print(a == nil, b == nil)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -525,6 +542,7 @@ local function quotientFormat(self)
     return ("%s / %s"):format(p1, p2)
 end
 function div(a, b)
+    errorIfAnyIsNull(2, a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -582,6 +600,7 @@ local function powerFormat(self)
     return ("%s^%s"):format(p1, p2)
 end
 function pow(a, b)
+    errorIfAnyIsNull(2, a, b)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -617,6 +636,7 @@ Expression__meta.__pow = function(a, b)
 end
 
 local function funcEval(self, point)
+    errorIfAnyIsNull(1, point)
     if self.actsOnExpressions then
         return self.func(self.parents[1]):evaluate(point)
     else
