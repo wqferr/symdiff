@@ -23,11 +23,11 @@ THE SOFTWARE.
 -- TODO make sum and product nodes support more than 2 parents
 ---@module "symdiff"
 local M = {}
-M._VERSION = "1.0.4"
+M._VERSION = "1.1.0"
 
+-- Configuration region
 
----@diagnostic disable-next-line: deprecated
-local unpack = unpack or table.unpack
+---@alias sdNumeric number
 
 local isNumeric = function(value)
     return type(value) == "number"
@@ -41,6 +41,11 @@ local isOne = function(value)
     return value == 1
 end
 
+-- End of configuration region
+
+---@diagnostic disable-next-line: deprecated
+local unpack = unpack or table.unpack
+
 local add, diff, mul, div, pow
 
 ---@class Expression
@@ -53,7 +58,7 @@ local add, diff, mul, div, pow
 ---@field package cachedDerivatives {Variable: Expression}
 ---@field package name string?
 ---@field package nodeType string
----@field package eval fun(self: Expression, point: Point): number|Expression
+---@field package eval fun(self: Expression, point: Point): sdNumeric|Expression
 ---@field package format fun(self): string
 ---@field package dependencies {Variable: boolean}
 ---@field package calculateDerivative fun(self: Expression, variable: Variable)
@@ -82,17 +87,17 @@ local FuncWrapper__meta = {}
 ---@class FunctionCall: Expression
 ---@field package repr (string|fun(arg: Expression): string)?
 ---@field package funcWrapper table?
----@field package func fun(arg: number): number
+---@field package func fun(arg: sdNumeric): sdNumeric
 ---@field package funcDerivative Function
 ---@field package actsOnExpressions boolean?
 
 ---@alias Point
----|{Variable: number} a mapping for the value of each variable at the point
+---|{Variable: sdNumeric} a mapping for the value of each variable at the point
 ---|number the value of the single Variable of the Expression
 
----@alias AlgebraicTerm Variable|Expression|number
+---@alias AlgebraicTerm Variable|Expression|sdNumeric
 
----@alias WrappedFunction (fun(arg: number): number|fun(arg: Expression): Expression)
+---@alias WrappedFunction (fun(arg: sdNumeric): sdNumeric|fun(arg: Expression): Expression)
 
 local zero, one
 
@@ -144,7 +149,7 @@ end
 
 ---@class DerivativeAccessor
 ---@operator call(Variable): Expression
----@operator call(Point): Expression|number
+---@operator call(Point): Expression|sdNumeric
 ---@field expression Expression
 local DerivativeAccessor__meta = {}
 
@@ -182,7 +187,7 @@ end
 
 ---Get the priority value of a given Expression node
 ---@param expression Expression
----@return number
+---@return sdNumeric
 ---@nodiscard
 local function getPriority(expression)
     return priorities[expression.nodeType]
@@ -249,7 +254,7 @@ end
 
 ---Create a new Expression node
 ---@param nodeType nodeTypes type of the node being created
----@param eval fun(e: Expression, p: Point): Expression|number evaluation function based on the Expression's parents
+---@param eval fun(e: Expression, p: Point): Expression|sdNumeric evaluation function based on the Expression's parents
 ---@param derivative fun(e: Expression, withRespectTo: Variable): Expression evaluation function for the expression's derivative based on its parents
 ---@param format fun(e: Expression): string function for representing the Expression as a string
 ---@param parents Expression[] parents of the expression, usually the operands
@@ -273,7 +278,7 @@ end
 
 ---Evaluate the Expression at a given point
 ---@param point Point the point at which to evaluate the Expression
----@return number|Expression result a number if there were no unresolved dependencies, an Expression of said dependencies otherwise
+---@return sdNumeric|Expression result a number if there were no unresolved dependencies, an Expression of said dependencies otherwise
 function M.Expression:evaluate(point)
     if isNumeric(point) then
         local onlyDep, reason = getOnlyDependency(self)
@@ -390,7 +395,7 @@ function add(a, b)
     end
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
-        ---@cast aEval number
+        ---@cast aEval sdNumeric
         if isZero(aEval) then
             return b
         elseif isConstant(b) then
@@ -423,7 +428,7 @@ function diff(a, b)
     end
     if isConstant(a) then
         local aEval = a:evaluate(nullPoint)
-        ---@cast aEval number
+        ---@cast aEval sdNumeric
         if isZero(aEval) then
             return -b
         elseif isConstant(b) then
@@ -495,8 +500,6 @@ local function constProduct(const, expr)
 end
 function mul(a, b)
     errorIfAnyIsNull(2, a, b)
-    print(a, b)
-    print(a == nil, b == nil)
     if isNumeric(a) then
         a = M.const(a)
     end
@@ -712,20 +715,6 @@ end
 ---@param deriv Function the function whose evaluation equals self's derivative
 function FuncWrapper:setDerivative(deriv)
     self.funcDerivative = deriv
-end
-
----Changes core functions for distinguishing numeric values.
----This is intended to be used, for examplel, to support complex numbers.
---@param funcs {string: fun(value: any): boolean} new functions to replace the old ones
-M.setNumericChecks = function(funcs)
-    isNumeric = funcs["isNumeric"] or isNumeric
-    isZero = funcs["isZero"] or isZero
-    isOne = funcs["isOne"] or isOne
-    funcs["isNumeric"], funcs["isZero"], funcs["isOne"] = nil, nil, nil
-    local n = next(funcs)
-    if n then
-        error("Unknown key in funcs table: "..n)
-    end
 end
 
 M.identity = M.func(function(x) return x end)
