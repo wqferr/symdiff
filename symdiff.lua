@@ -70,6 +70,7 @@ local add, diff, mul, div, pow
 ---@operator mul(AlgebraicTerm): Expression
 ---@operator div(AlgebraicTerm): Expression
 ---@operator pow(AlgebraicTerm): Expression
+---@operator unm(): Expression
 ---@field public derivative DerivativeAccessor
 ---@field package cachedDerivatives {Variable: Expression}
 ---@field package name string?
@@ -90,6 +91,7 @@ Expression__meta.__index = M.Expression
 ---@operator mul(AlgebraicTerm): Expression
 ---@operator div(AlgebraicTerm): Expression
 ---@operator pow(AlgebraicTerm): Expression
+---@operator unm(): Expression
 
 ---@class Function
 ---@operator call(AlgebraicTerm): Expression
@@ -113,7 +115,7 @@ local FuncWrapper__meta = {}
 
 ---@alias AlgebraicTerm Variable|Expression|sdNumeric
 
----@alias WrappedFunction (fun(arg: sdNumeric): sdNumeric|fun(arg: Expression): Expression)
+---@alias WrappedFunction (fun(arg: sdNumeric): sdNumeric)|(fun(arg: Expression): Expression)
 
 local zero, one
 
