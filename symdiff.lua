@@ -29,16 +29,32 @@ M._VERSION = "1.1.0"
 
 ---@alias sdNumeric number
 
+---Checks if a value is sdNumeric
+---@param value any
+---@return boolean
 local isNumeric = function(value)
     return type(value) == "number"
 end
 
+---Check if sdNumeric value is zero
+---@param value sdNumeric
+---@return boolean
 local isZero = function(value)
     return value == 0
 end
 
+---Check if sdNumeric value is one
+---@param value sdNumeric
+---@return boolean
 local isOne = function(value)
     return value == 1
+end
+
+---Convert a number to a sdNumeric
+---@param value number
+---@return sdNumeric
+local convert = function(value)
+    return value
 end
 
 -- End of configuration region
