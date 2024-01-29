@@ -30,16 +30,23 @@ M._VERSION = "1.1.0"
 local im = require"imagine"
 ---@alias sdNumeric Complex
 
-local isNumeric = function(x)
-    return type(x) == "number" or im.isComplex(x)
+local isNumeric = function(value)
+    return type(value) == "number" or im.isComplex(value)
 end
 
-local isZero = function(x)
-    return x == 0 or x == im.zero
+local isZero = function(value)
+    return value == 0 or value == im.zero
 end
 
-local isOne = function(x)
-    return x == 1 or x == im.one
+local isOne = function(value)
+    return value == 1 or value == im.one
+end
+
+---Convert a number to a sdNumeric
+---@param value number
+---@return sdNumeric
+local convert = function(value)
+    return im.asComplex(value)
 end
 
 -- End of configuration region
@@ -118,7 +125,7 @@ local nodeTypes = {
     pow = "power",
     func = "function"
 }
-setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..tostring(k)) end})
+setmetatable(nodeTypes, {__index = function(_, k) error("Unknown nodeType: "..tostring(k)) end})
 
 ---@enum priorities
 local priorities = {
@@ -188,7 +195,7 @@ end
 
 ---Get the priority value of a given Expression node
 ---@param expression Expression
----@return sdNumeric
+---@return number
 ---@nodiscard
 local function getPriority(expression)
     return priorities[expression.nodeType]
@@ -295,6 +302,9 @@ function M.Expression:evaluate(point)
         end
     end
     local result = self:eval(point)
+    if type(result) == "number" then
+        result = convert(result)
+    end
     return result
 end
 
@@ -342,7 +352,7 @@ local function createConstEval(value)
     end
 end
 
-local function constDerivative(_self, _withRespectTo)
+local function constDerivative(_, _)
     return zero
 end
 
