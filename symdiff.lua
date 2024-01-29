@@ -62,6 +62,7 @@ local add, diff, mul, div, pow
 ---@operator mul(AlgebraicTerm): Expression
 ---@operator div(AlgebraicTerm): Expression
 ---@operator pow(AlgebraicTerm): Expression
+---@operator unm(): Expression
 ---@field public derivative DerivativeAccessor
 ---@field package cachedDerivatives {Variable: Expression}
 ---@field package name string?
@@ -82,6 +83,7 @@ Expression__meta.__index = M.Expression
 ---@operator mul(AlgebraicTerm): Expression
 ---@operator div(AlgebraicTerm): Expression
 ---@operator pow(AlgebraicTerm): Expression
+---@operator unm(): Expression
 
 ---@class Function
 ---@operator call(AlgebraicTerm): Expression
@@ -105,7 +107,7 @@ local FuncWrapper__meta = {}
 
 ---@alias AlgebraicTerm Variable|Expression|sdNumeric
 
----@alias WrappedFunction (fun(arg: sdNumeric): sdNumeric|fun(arg: Expression): Expression)
+---@alias WrappedFunction (fun(arg: sdNumeric): sdNumeric)|(fun(arg: Expression): Expression)
 
 local zero, one
 
@@ -731,7 +733,7 @@ end
 M.identity = M.func(function(x) return x end)
 M.reciproc = M.func(function(x) return 1/x end)
 
-M.sqrt = M.func(function(x) return math.sqrt(x) end, true, "sqrt")
+M.sqrt = M.func(function(x) return im.sqrt(x) end, true, "sqrt")
 local sqrtDeriv = M.func(function(x) return 1/(2*M.sqrt(x)) end)
 M.sqrt:setDerivative(sqrtDeriv)
 
@@ -753,9 +755,10 @@ M.tanh:setDerivative(tanhDeriv)
 M.sinh:setDerivative(M.cosh)
 M.cosh:setDerivative(M.sinh)
 
-M.sin = M.func(math.sin, true, "sin")
-M.cos = M.func(math.cos, true, "cos")
-M.tan = M.func(math.tan, true, "tan")
+M.sin = M.func(im.sin, true, "sin")
+M.cos = M.func(im.cos, true, "cos")
+M.tan = M.func(im.tan, true, "tan")
+
 local msin = M.func(function(x) return -M.sin(x) end)
 local mcos = M.func(function(x) return -M.cos(x) end)
 local sec2inv = M.func(function(x) return 1/(M.cos(x))^2 end)
