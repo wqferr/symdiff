@@ -30,19 +30,28 @@ M._VERSION = "1.1.0"
 local im = require"imagine"
 ---@alias sdNumeric Complex
 
+---Checks if a value is sdNumeric
+---@param value any
+---@return boolean
 local isNumeric = function(value)
     return type(value) == "number" or im.isComplex(value)
 end
 
-local zeroVal = im.zero
+---Check if sdNumeric value is zero
+---@param value sdNumeric
+---@return boolean
 local isZero = function(value)
     return value == 0 or value == im.zero
 end
+local zeroVal = im.zero
 
-local oneVal = im.one
+---Check if sdNumeric value is one
+---@param value sdNumeric
+---@return boolean
 local isOne = function(value)
     return value == 1 or value == im.one
 end
+local oneVal = im.one
 
 ---Convert a number to a sdNumeric
 ---@param value number
