@@ -42,6 +42,7 @@ end
 local isZero = function(value)
     return value == 0
 end
+local zeroVal = 0
 
 ---Check if sdNumeric value is one
 ---@param value sdNumeric
@@ -49,6 +50,7 @@ end
 local isOne = function(value)
     return value == 1
 end
+local oneVal = 1
 
 ---Convert a number to a sdNumeric
 ---@param value number
@@ -389,8 +391,8 @@ function M.const(value, name)
     c.name = name
     return c
 end
-zero = M.const(0)
-one = M.const(1)
+zero = M.const(zero)
+one = M.const(one)
 
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
