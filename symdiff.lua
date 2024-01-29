@@ -310,6 +310,9 @@ function M.Expression:evaluate(point)
         end
     end
     local result = self:eval(point)
+    if type(result) == "number" then
+        result = convert(result)
+    end
     return result
 end
 
