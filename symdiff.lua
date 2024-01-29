@@ -133,7 +133,7 @@ local nodeTypes = {
     pow = "power",
     func = "function"
 }
-setmetatable(nodeTypes, {__index = function(t, k) error("Unknown nodeType: "..tostring(k)) end})
+setmetatable(nodeTypes, {__index = function(_, k) error("Unknown nodeType: "..tostring(k)) end})
 
 ---@enum priorities
 local priorities = {
@@ -360,7 +360,7 @@ local function createConstEval(value)
     end
 end
 
-local function constDerivative(_self, _withRespectTo)
+local function constDerivative(_, _)
     return zero
 end
 
@@ -454,7 +454,7 @@ function diff(a, b)
             return M.const(aEval - b:evaluate(nullPoint))
         end
     else
-        if isConstant(b) and isZero(b:evaluate(nullPoint)) then
+        if isConstant(b) and isZero(b:evaluate(nullPoint) --[[@as sdNumeric]]) then
             return a
         end
     end
@@ -529,7 +529,7 @@ function mul(a, b)
         a, b = b, a
     end
     if isConstant(a) then
-        local aEval = a:evaluate(nullPoint)
+        local aEval = a:evaluate(nullPoint) --[[@as sdNumeric]]
         if isOne(aEval) then
             return b
         elseif isConstant(b) then
@@ -631,14 +631,14 @@ function pow(a, b)
     end
     local calculateDerivative
     if isConstant(b) then
-        if isZero(b:evaluate(nullPoint)) then
+        if isZero(b:evaluate(nullPoint) --[[@as sdNumeric]]) then
             return one
-        elseif isOne(b:evaluate(nullPoint)) then
+        elseif isOne(b:evaluate(nullPoint) --[[@as sdNumeric]]) then
             return a
         end
         calculateDerivative = powerRuleDerivative
     elseif isConstant(a) then
-        if isZero(a:evaluate(nullPoint)) then
+        if isZero(a:evaluate(nullPoint) --[[@as sdNumeric]]) then
             return zero
         end
         calculateDerivative = constantBasePowerDerivative
