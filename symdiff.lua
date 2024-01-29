@@ -27,18 +27,19 @@ M._VERSION = "1.1.0"
 
 -- Configuration region
 
----@alias sdNumeric number
+local im = require"imagine"
+---@alias sdNumeric Complex
 
-local isNumeric = function(value)
-    return type(value) == "number"
+local isNumeric = function(x)
+    return type(x) == "number" or im.isComplex(x)
 end
 
-local isZero = function(value)
-    return value == 0
+local isZero = function(x)
+    return x == 0 or x == im.zero
 end
 
-local isOne = function(value)
-    return value == 1
+local isOne = function(x)
+    return x == 1 or x == im.one
 end
 
 -- End of configuration region
