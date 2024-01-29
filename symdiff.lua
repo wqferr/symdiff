@@ -34,10 +34,12 @@ local isNumeric = function(value)
     return type(value) == "number" or im.isComplex(value)
 end
 
+local zeroVal = im.zero
 local isZero = function(value)
     return value == 0 or value == im.zero
 end
 
+local oneVal = im.one
 local isOne = function(value)
     return value == 1 or value == im.one
 end
@@ -381,8 +383,8 @@ function M.const(value, name)
     c.name = name
     return c
 end
-zero = M.const(0)
-one = M.const(1)
+zero = M.const(zeroVal)
+one = M.const(oneVal)
 
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
