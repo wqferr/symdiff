@@ -744,7 +744,7 @@ end
 M.identity = M.func(function(x) return x end)
 M.reciproc = M.func(function(x) return 1/x end)
 
-M.sqrt = M.func(function(x) return im.sqrt(x) end, true, "sqrt")
+M.sqrt = M.func(function(x) return im.sqrt(x --[[@as sdNumeric]]) end, true, "sqrt")
 local sqrtDeriv = M.func(function(x) return 1/(2*M.sqrt(x)) end)
 M.sqrt:setDerivative(sqrtDeriv)
 
