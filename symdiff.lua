@@ -391,8 +391,8 @@ function M.const(value, name)
     c.name = name
     return c
 end
-zero = M.const(zero)
-one = M.const(one)
+zero = M.const(zeroVal)
+one = M.const(oneVal)
 
 local function sumEval(self, point)
     return self.parents[1]:evaluate(point) + self.parents[2]:evaluate(point)
@@ -743,7 +743,7 @@ end
 M.identity = M.func(function(x) return x end)
 M.reciproc = M.func(function(x) return 1/x end)
 
-M.sqrt = M.func(function(x) return math.sqrt(x) end, true, "sqrt")
+M.sqrt = M.func(function(x) return math.sqrt(x --[[@as sdNumeric]]) end, true, "sqrt")
 local sqrtDeriv = M.func(function(x) return 1/(2*M.sqrt(x)) end)
 M.sqrt:setDerivative(sqrtDeriv)
 
