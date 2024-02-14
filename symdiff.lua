@@ -256,6 +256,13 @@ local function isConstant(expr)
     return expr.nodeType == nodeTypes.const
 end
 
+---Checks if the argument is an Expression.
+---@param expr any the value to be checked
+---@return boolean isExpr whether the value is an expression or not
+function M.isExpression(expr)
+  return getmetatable(expr) == Expression__meta
+end
+
 ---Wrap parents of the Expression expr in parens if needed
 ---@param expr Expression the expression being evaluated as a string
 ---@param parents Expression[] operands of the given Expression
