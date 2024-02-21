@@ -715,6 +715,9 @@ end
 FuncWrapper__meta.__index = FuncWrapper
 
 FuncWrapper__meta.__call = function(self, arg)
+    if not arg then
+        error("Function must have exactly 1 argument", 2)
+    end
     if isNumeric(arg) then
         arg = M.const(arg)
     end
