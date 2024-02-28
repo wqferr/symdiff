@@ -754,7 +754,7 @@ end
 M.identity = M.func(function(x) return x end)
 M.reciproc = M.func(function(x) return 1/x end)
 
-M.sqrt = M.func(function(x) return im.sqrt(x --[[@as sdNumeric]]) end, true, "sqrt")
+M.sqrt = M.func(function(x) return im.asComplex(im.sqrt(x --[[@as sdNumeric]])) end, true, "sqrt")
 local sqrtDeriv = M.func(function(x) return 1/(2*M.sqrt(x)) end)
 M.sqrt:setDerivative(sqrtDeriv)
 
@@ -765,11 +765,11 @@ M.exp = M.func(math.exp, true, "exp")
 M.exp:setDerivative(M.exp)
 
 local sinhF = function(x) return (M.exp(x) - M.exp(-x)) / 2 end
-M.sinh = M.func(sinhF, false, "sinh")
+M.sinh = M.func(sinhF, true, "sinh")
 local coshF = function(x) return (M.exp(x) + M.exp(-x) / 2) end
-M.cosh = M.func(coshF, false, "cosh")
+M.cosh = M.func(coshF, true, "cosh")
 local tanhF = function(x) return (M.exp(2*x) - 1) / (M.exp(2*x) + 1) end
-M.tanh = M.func(tanhF, false, "tanh")
+M.tanh = M.func(tanhF, true, "tanh")
 local tanhDeriv = M.func(function(x) return 1/M.cosh(x)^2 end, true)
 M.tanh:setDerivative(tanhDeriv)
 
