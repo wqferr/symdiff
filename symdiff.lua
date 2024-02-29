@@ -765,11 +765,11 @@ M.exp = M.func(im.exp, true, "exp")
 M.exp:setDerivative(M.exp)
 
 local sinhF = function(x) return (M.exp(x) - M.exp(-x)) / 2 end
-M.sinh = M.func(sinhF, true, "sinh")
+M.sinh = M.func(sinhF, false, "sinh")
 local coshF = function(x) return (M.exp(x) + M.exp(-x) / 2) end
-M.cosh = M.func(coshF, true, "cosh")
+M.cosh = M.func(coshF, false, "cosh")
 local tanhF = function(x) return (M.exp(2*x) - 1) / (M.exp(2*x) + 1) end
-M.tanh = M.func(tanhF, true, "tanh")
+M.tanh = M.func(tanhF, false, "tanh")
 local tanhDeriv = M.func(function(x) return 1/M.cosh(x)^2 end)
 M.tanh:setDerivative(tanhDeriv)
 
